@@ -46,14 +46,6 @@ class _DatabaseAsync:
 
         return await self._run_in_executor(_func)
 
-    async def firstkey(self) -> bytes:  # GDBM
-        """Return the first key for looping over all keys."""
-
-        def _func():
-            return self._db.firstkey()
-
-        return await self._run_in_executor(_func)
-
     async def keys(self) -> List[bytes]:
         """Return existing keys."""
 
@@ -62,7 +54,43 @@ class _DatabaseAsync:
 
         return await self._run_in_executor(_func)
 
-    async def nextkey(self, key: Union[str, bytes]) -> Optional[bytes]:  # GDBM
+    async def set(self, key: Union[str, bytes], value: Union[str, bytes]) -> None:
+        """Set key to hold the value.
+        If key already holds a value, it is overwritten.
+        """
+
+        def _func():
+            self._db[key] = value
+
+        await self._run_in_executor(_func)
+
+    async def setdefault(self, key: Union[str, bytes], default: bytes) -> bytes:
+        """Set key to hold the default value, if it does not yet exist.
+        Or return current value of existing key.
+        """
+
+        def _setdefault():
+            return self._db.setdefault(key, default)
+
+        return await self._run_in_executor(_setdefault)
+
+    async def _run_in_executor(self, func) -> Any:
+        async with self._lock:
+            return await self._loop.run_in_executor(None, func)
+
+
+class GdbmDatabaseAsync(_DatabaseAsync):
+    """A DBM database."""
+
+    async def firstkey(self) -> bytes:
+        """Return the first key for looping over all keys."""
+
+        def _func():
+            return self._db.firstkey()
+
+        return await self._run_in_executor(_func)
+
+    async def nextkey(self, key: Union[str, bytes]) -> Optional[bytes]:
         """Return the next key, when looping over all keys.
         Or return None, when the end of the loop has been reached.
         """
@@ -80,16 +108,6 @@ class _DatabaseAsync:
 
         return await self._run_in_executor(_func)
 
-    async def set(self, key: Union[str, bytes], value: Union[str, bytes]) -> None:
-        """Set key to hold the value.
-        If key already holds a value, it is overwritten.
-        """
-
-        def _func():
-            self._db[key] = value
-
-        await self._run_in_executor(_func)
-
     async def sync(self) -> List[bytes]:
         """When the database has been opened in fast mode,
         this method forces any unwritten data to be written to the disk.
@@ -99,20 +117,6 @@ class _DatabaseAsync:
             return self._db.sync()
 
         return await self._run_in_executor(_func)
-
-    async def setdefault(self, key: Union[str, bytes], default: bytes) -> bytes:
-        """Set key to hold the default value, if it does not yet exist.
-        Or return current value of existing key.
-        """
-
-        def _setdefault():
-            return self._db.setdefault(key, default)
-
-        return await self._run_in_executor(_setdefault)
-
-    async def _run_in_executor(self, func) -> Any:
-        async with self._lock:
-            return await self._loop.run_in_executor(None, func)
 
 
 @asynccontextmanager
@@ -127,8 +131,12 @@ async def open(*args, **kwargs):
 
     loop = asyncio.get_running_loop()
     db = await loop.run_in_executor(None, _open)
+    dbm_variant = type(db).__name__
     try:
-        yield _DatabaseAsync(db, loop)
+        if dbm_variant == "gdbm":
+            yield GdbmDatabaseAsync(db, loop)
+        else:
+            yield _DatabaseAsync(db, loop)
     finally:
         await loop.run_in_executor(None, _close, db)
 
