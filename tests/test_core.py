@@ -35,6 +35,11 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
             # then
             self.assertIsNone(result)
 
+    async def test_close_should_close_the_db(self):
+        async with aiodbm.open(self.data_path, "c") as db:
+            # when/then
+            await db.close()
+
     async def test_delete_should_remove_entry(self):
         async with aiodbm.open(self.data_path, "c") as db:
             # given
@@ -120,8 +125,44 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
 
     async def test_setdefault_should_return_existing_value_when_key_exists(self):
         async with aiodbm.open(self.data_path, "c") as db:
-            # when
+            # given
             await db.set("alpha", "green")
+            # when
             result = await db.setdefault("alpha", b"blue")
             # then
             self.assertEqual(result, b"green")
+
+    async def test_firstkey_should_return_first_key(self):
+        async with aiodbm.open(self.data_path, "c") as db:
+            # given
+            await db.set("alpha", "green")
+            # when
+            result = await db.firstkey()
+            # then
+            self.assertEqual(result, b"alpha")
+
+    async def test_can_loop_though_all_keys(self):
+        async with aiodbm.open(self.data_path, "c") as db:
+            # given
+            await db.set("alpha", "green")
+            await db.set("bravo", "green")
+            await db.set("charlie", "green")
+            # when
+            keys = set()
+            key = await db.firstkey()
+            while key is not None:
+                keys.add(key)
+                key = await db.nextkey(key)
+            # then
+            self.assertSetEqual(keys, {b"alpha", b"bravo", b"charlie"})
+
+    async def test_can_reorganize(self):
+        async with aiodbm.open(self.data_path, "c") as db:
+            # when/then
+            await db.reorganize()
+
+    async def test_can_sync(self):
+        async with aiodbm.open(self.data_path, "cf") as db:
+            # when/then
+            await db.set("alpha", "green")
+            await db.sync()

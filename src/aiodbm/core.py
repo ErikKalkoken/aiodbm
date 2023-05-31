@@ -13,48 +13,92 @@ class _DatabaseAsync:
         self._loop = loop
         self._lock = asyncio.Lock()
 
+    async def close(self) -> None:
+        """Close the database explicitly."""
+
+        def _func():
+            return self._db.close()
+
+        return await self._run_in_executor(_func)
+
     async def get(self, key: Union[str, bytes]) -> Optional[bytes]:
         """Get the value of key. If the key does not exist, return None."""
 
-        def _get():
+        def _func():
             return self._db.get(key)
 
-        return await self._run_in_executor(_get)
+        return await self._run_in_executor(_func)
 
     async def delete(self, key: Union[str, bytes]):
-        def _delete():
+        def _func():
             try:
                 del self._db[key]
             except KeyError as ex:
                 raise KeyError(f"Key {key} does not exist") from ex
 
-        await self._run_in_executor(_delete)
+        await self._run_in_executor(_func)
 
     async def exists(self, key: Union[str, bytes]) -> bool:
         """Return True when the given key exists, else False."""
 
-        def _exists():
+        def _func():
             return key in self._db
 
-        return await self._run_in_executor(_exists)
+        return await self._run_in_executor(_func)
+
+    async def firstkey(self) -> bytes:  # GDBM
+        """Return the first key for looping over all keys."""
+
+        def _func():
+            return self._db.firstkey()
+
+        return await self._run_in_executor(_func)
 
     async def keys(self) -> List[bytes]:
         """Return existing keys."""
 
-        def _keys():
+        def _func():
             return self._db.keys()
 
-        return await self._run_in_executor(_keys)
+        return await self._run_in_executor(_func)
+
+    async def nextkey(self, key: Union[str, bytes]) -> Optional[bytes]:  # GDBM
+        """Return the next key, when looping over all keys.
+        Or return None, when the end of the loop has been reached.
+        """
+
+        def _func():
+            return self._db.nextkey(key)
+
+        return await self._run_in_executor(_func)
+
+    async def reorganize(self) -> List[bytes]:
+        """Reorganize the database."""
+
+        def _func():
+            return self._db.reorganize()
+
+        return await self._run_in_executor(_func)
 
     async def set(self, key: Union[str, bytes], value: Union[str, bytes]) -> None:
         """Set key to hold the value.
         If key already holds a value, it is overwritten.
         """
 
-        def _set():
+        def _func():
             self._db[key] = value
 
-        await self._run_in_executor(_set)
+        await self._run_in_executor(_func)
+
+    async def sync(self) -> List[bytes]:
+        """When the database has been opened in fast mode,
+        this method forces any unwritten data to be written to the disk.
+        """
+
+        def _func():
+            return self._db.sync()
+
+        return await self._run_in_executor(_func)
 
     async def setdefault(self, key: Union[str, bytes], default: bytes) -> bytes:
         """Set key to hold the default value, if it does not yet exist.
@@ -71,21 +115,12 @@ class _DatabaseAsync:
             return await self._loop.run_in_executor(None, func)
 
 
-""" ???
-clear
-close ?
-items
-update
-values
-"""
-
-
 @asynccontextmanager
-async def open(filename: Union[str, Path], flag="r", mode: int = 438):
+async def open(*args, **kwargs):
     """Open the DBM database file and return a corresponding object."""
 
     def _open():
-        return dbm.open(str(filename), flag, mode)  # type: ignore
+        return dbm.open(*args, **kwargs)
 
     def _close(db):
         return db.close()
@@ -99,17 +134,15 @@ async def open(filename: Union[str, Path], flag="r", mode: int = 438):
 
 
 async def whichdb(filename: Union[str, Path]) -> Optional[str]:
-    """This function attempts to guess which of the several simple database modules
-    available — dbm.gnu, dbm.ndbm or dbm.dumb — should be used to open a given file.
+    """Return the name of the DBM implementation,
+    which can be used for opening the given file.
 
-    Returns one of the following values:
-    None if the file can't be opened because it's unreadable or doesn't exist;
-    the empty string ('') if the file's format can't be guessed;
-    or a string containing the required module name, such as 'dbm.ndbm' or 'dbm.gnu'.
+    Or if the file can not be read return None.
+    Or if the file is not in a known DBM format, return an empty string.
     """
 
-    def _whichdb():
+    def _func():
         return dbm.whichdb(str(filename))
 
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _whichdb)
+    return await loop.run_in_executor(None, _func)
