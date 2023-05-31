@@ -2,59 +2,73 @@ import asyncio
 import dbm
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List, Union
+from typing import Any, List, Optional, Union
 
 
-class DbmAsync:
-    """An async wrapper for a DBM database."""
+class _DatabaseAsync:
+    """A DBM database."""
 
     def __init__(self, db, loop: asyncio.AbstractEventLoop) -> None:
         self._db = db
         self._loop = loop
+        self._lock = asyncio.Lock()
 
-    async def set(self, key: Union[str, bytes], value: Union[str, bytes]) -> None:
-        await self._loop.run_in_executor(None, self._set, self._db, key, value)
+    async def get(self, key: Union[str, bytes]) -> Optional[bytes]:
+        """Get the value of key. If the key does not exist, return None."""
 
-    @staticmethod
-    def _set(db, key, value):
-        db[key] = value
+        def _get():
+            return self._db.get(key)
 
-    async def get(self, key: Union[str, bytes]) -> bytes:
-        return await self._loop.run_in_executor(None, self._get, self._db, key)
-
-    @staticmethod
-    def _get(db, key):
-        return db.get(key)
-
-    async def setdefault(self, key: Union[str, bytes], default: bytes) -> bytes:
-        return await self._loop.run_in_executor(
-            None, self._setdefault, self._db, key, default
-        )
-
-    @staticmethod
-    def _setdefault(db, key, default):
-        return db.setdefault(key, default)
+        return await self._run_in_executor(_get)
 
     async def delete(self, key: Union[str, bytes]):
-        await self._loop.run_in_executor(None, self._delete, self._db, key)
+        def _delete():
+            try:
+                del self._db[key]
+            except KeyError as ex:
+                raise KeyError(f"Key {key} does not exist") from ex
 
-    @staticmethod
-    def _delete(db, key):
-        del db[key]
+        await self._run_in_executor(_delete)
 
-    async def has_key(self, key: Union[str, bytes]) -> bool:
-        return await self._loop.run_in_executor(None, self._has_key, self._db, key)
+    async def exists(self, key: Union[str, bytes]) -> bool:
+        """Return True when the given key exists, else False."""
 
-    @staticmethod
-    def _has_key(db, key):
-        return key in db
+        def _exists():
+            return key in self._db
+
+        return await self._run_in_executor(_exists)
 
     async def keys(self) -> List[bytes]:
-        return await self._loop.run_in_executor(None, self._keys, self._db)
+        """Return existing keys."""
 
-    @staticmethod
-    def _keys(db):
-        return db.keys()
+        def _keys():
+            return self._db.keys()
+
+        return await self._run_in_executor(_keys)
+
+    async def set(self, key: Union[str, bytes], value: Union[str, bytes]) -> None:
+        """Set key to hold the value.
+        If key already holds a value, it is overwritten.
+        """
+
+        def _set():
+            self._db[key] = value
+
+        await self._run_in_executor(_set)
+
+    async def setdefault(self, key: Union[str, bytes], default: bytes) -> bytes:
+        """Set key to hold the default value, if it does not yet exist.
+        Or return current value of existing key.
+        """
+
+        def _setdefault():
+            return self._db.setdefault(key, default)
+
+        return await self._run_in_executor(_setdefault)
+
+    async def _run_in_executor(self, func) -> Any:
+        async with self._lock:
+            return await self._loop.run_in_executor(None, func)
 
 
 """ ???
@@ -68,28 +82,34 @@ values
 
 @asynccontextmanager
 async def open(filename: Union[str, Path], flag="r", mode: int = 438):
-    def _open(filename):
+    """Open the DBM database file and return a corresponding object."""
+
+    def _open():
         return dbm.open(str(filename), flag, mode)  # type: ignore
 
     def _close(db):
         return db.close()
 
     loop = asyncio.get_running_loop()
-    db = await loop.run_in_executor(None, _open, filename)
+    db = await loop.run_in_executor(None, _open)
     try:
-        yield DbmAsync(db, loop)
+        yield _DatabaseAsync(db, loop)
     finally:
         await loop.run_in_executor(None, _close, db)
 
 
-async def whichdb(filename: Union[str, Path]) -> str:
-    def _whichdb(filename):
+async def whichdb(filename: Union[str, Path]) -> Optional[str]:
+    """This function attempts to guess which of the several simple database modules
+    available — dbm.gnu, dbm.ndbm or dbm.dumb — should be used to open a given file.
+
+    Returns one of the following values:
+    None if the file can't be opened because it's unreadable or doesn't exist;
+    the empty string ('') if the file's format can't be guessed;
+    or a string containing the required module name, such as 'dbm.ndbm' or 'dbm.gnu'.
+    """
+
+    def _whichdb():
         return dbm.whichdb(str(filename))
 
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _whichdb, filename)
-
-
-def test():
-    with dbm.open("xxx") as db:
-        db.setdefault("aa", b"bj")
+    return await loop.run_in_executor(None, _whichdb)
