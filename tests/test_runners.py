@@ -4,21 +4,33 @@ import time
 import unittest
 from functools import partial
 
-from aiodbm.helpers import SingleWorkerThread
+from aiodbm.runners import ThreadRunner
 
 from .utils import random_strings
 
 
 class TestSingleWorkerThread(unittest.IsolatedAsyncioTestCase):
+    async def test_can_stop_the_thread(self):
+        # given
+        loop = asyncio.get_running_loop()
+        thread = ThreadRunner(loop=loop)
+        thread.start()
+        # when
+        thread.stop()
+        time.sleep(1)
+        # then
+        self.assertFalse(thread.is_alive())
+
     async def test_single_call(self):
         # given
         loop = asyncio.get_running_loop()
-        thread = SingleWorkerThread(loop=loop)
+        thread = ThreadRunner(loop=loop)
         thread.start()
         # when
         result = await thread.run_soon_async(lambda: "DONE")
         # then
         self.assertEqual(result, "DONE")
+        thread.stop()
 
     async def test_multiple_concurrent_calls(self):
         def worker(item):
@@ -27,7 +39,7 @@ class TestSingleWorkerThread(unittest.IsolatedAsyncioTestCase):
 
         # given
         loop = asyncio.get_running_loop()
-        thread = SingleWorkerThread(loop=loop)
+        thread = ThreadRunner(loop=loop)
         thread.start()
         # when
         items = random_strings(50)
@@ -40,6 +52,7 @@ class TestSingleWorkerThread(unittest.IsolatedAsyncioTestCase):
 
         # then
         self.assertSetEqual(set(items), set(items_2))
+        thread.stop()
 
     async def test_should_reraise_exception_from_thread(self):
         def worker():
@@ -47,8 +60,10 @@ class TestSingleWorkerThread(unittest.IsolatedAsyncioTestCase):
 
         # given
         loop = asyncio.get_running_loop()
-        thread = SingleWorkerThread(loop=loop)
+        thread = ThreadRunner(loop=loop)
         thread.start()
         # when/then
         with self.assertRaises(RuntimeError):
             await thread.run_soon_async(worker)
+
+        thread.stop()

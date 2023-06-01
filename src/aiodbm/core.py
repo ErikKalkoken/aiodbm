@@ -4,19 +4,20 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, List, Optional, Union
 
-from .helpers import SingleWorkerThread
+from .runners import ThreadRunner
 
 
 class DbmDatabaseAsync:
     """A DBM database."""
 
-    def __init__(self, db, loop: asyncio.AbstractEventLoop) -> None:
+    def __init__(
+        self, db, loop: asyncio.AbstractEventLoop, runner: ThreadRunner
+    ) -> None:
         self._db = db
         self._loop = loop
         self._lock = asyncio.Lock()
         loop = asyncio.get_running_loop()
-        self.thread = SingleWorkerThread(loop=loop)
-        self.thread.start()
+        self.runner = runner
 
     @property
     def _dbm_type_name(self) -> str:
@@ -92,7 +93,7 @@ class DbmDatabaseAsync:
     async def _run_in_thread(self, func) -> Any:
         async with self._lock:
             # return await asyncio.to_thread(func)
-            return await self.thread.run_soon_async(func)
+            return await self.runner.run_soon_async(func)
 
 
 class GdbmDatabaseAsync(DbmDatabaseAsync):
@@ -142,20 +143,20 @@ async def open(*args, **kwargs):
     def _open():
         return dbm.open(*args, **kwargs)
 
-    def _close(db):
-        return db.close()
-
     loop = asyncio.get_running_loop()
-    db = await loop.run_in_executor(None, _open)
+    runner = ThreadRunner(loop=loop)
+    runner.start()
+    db = await runner.run_soon_async(_open)
 
     dbm_variant = type(db).__name__
     try:
         if dbm_variant == "gdbm":
-            yield GdbmDatabaseAsync(db, loop)
+            yield GdbmDatabaseAsync(db, loop, runner)
         else:
-            yield DbmDatabaseAsync(db, loop)
+            yield DbmDatabaseAsync(db, loop, runner)
     finally:
-        await loop.run_in_executor(None, _close, db)
+        await runner.run_soon_async(db.close)
+        runner.stop()
 
 
 async def whichdb(filename: Union[str, Path]) -> Optional[str]:
