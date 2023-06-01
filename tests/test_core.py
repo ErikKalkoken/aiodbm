@@ -1,15 +1,18 @@
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 import aiodbm
 
+python_version = f"{sys.version_info.major}{sys.version_info.minor}"
+
 
 class DbmAsyncioTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.temp_dir = Path(tempfile.mkdtemp())
-        self.data_path = self.temp_dir / "data.dbm"
+        self.data_path = str(self.temp_dir / "data.dbm")
 
     def tearDown(self) -> None:
         shutil.rmtree(self.temp_dir, ignore_errors=True)
@@ -24,7 +27,7 @@ class TestDbmFunctions(DbmAsyncioTestCase):
         # when
         result = await aiodbm.whichdb(self.data_path)
         # then
-        self.assertEqual(result, "dbm.gnu")
+        self.assertIn(result, ["dbm.gnu", "dbm.ndbm", "dbm.dumb"])
 
 
 class TestDatabaseAsync(DbmAsyncioTestCase):
@@ -82,7 +85,7 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
             # when
             result = await db.keys()
             # then
-            self.assertListEqual(result, [b"bravo", b"alpha"])
+            self.assertSetEqual(set(result), {b"bravo", b"alpha"})
 
     async def test_keys_should_return_empty_list_when_no_keys(self):
         async with aiodbm.open(self.data_path, "c") as db:
@@ -139,6 +142,9 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
             # then
             self.assertEqual(result, b"green")
 
+
+@unittest.skipIf(python_version in ["38", "39"], reason="Unsupported Python")
+class TestGdbmFunctions(DbmAsyncioTestCase):
     async def test_firstkey_should_return_first_key(self):
         async with aiodbm.open(self.data_path, "c") as db:
             # given

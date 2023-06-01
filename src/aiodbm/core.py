@@ -13,6 +13,14 @@ class DbmDatabaseAsync:
         self._loop = loop
         self._lock = asyncio.Lock()
 
+    @property
+    def _dbm_type_name(self) -> str:
+        return type(self._db).__name__
+
+    @property
+    def is_gdbm(self) -> bool:
+        return self._dbm_type_name == "gdbm"
+
     async def close(self) -> None:
         """Close the database."""
 
