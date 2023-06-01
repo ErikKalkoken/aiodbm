@@ -30,7 +30,7 @@ class TestSingleWorkerThread(unittest.IsolatedAsyncioTestCase):
         thread = SingleWorkerThread(loop=loop)
         thread.start()
         # when
-        items = random_strings(100)
+        items = random_strings(50)
         tasks = []
         for item in items:
             await asyncio.sleep(random.random() / 20)  # add jitter

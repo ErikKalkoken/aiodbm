@@ -32,7 +32,7 @@ class DbmDatabaseAsync:
         def _func():
             return self._db.close()
 
-        return await self._run_in_executor(_func)
+        return await self._run_in_thread(_func)
 
     async def get(
         self, key: Union[str, bytes], default: Optional[bytes] = None
@@ -42,7 +42,7 @@ class DbmDatabaseAsync:
         def _func():
             return self._db.get(key, default)
 
-        return await self._run_in_executor(_func)
+        return await self._run_in_thread(_func)
 
     async def delete(self, key: Union[str, bytes]):
         def _func():
@@ -51,7 +51,7 @@ class DbmDatabaseAsync:
             except KeyError as ex:
                 raise KeyError(f"Key {key} does not exist") from ex
 
-        await self._run_in_executor(_func)
+        await self._run_in_thread(_func)
 
     async def exists(self, key: Union[str, bytes]) -> bool:
         """Return True when the given key exists, else False."""
@@ -59,7 +59,7 @@ class DbmDatabaseAsync:
         def _func():
             return key in self._db
 
-        return await self._run_in_executor(_func)
+        return await self._run_in_thread(_func)
 
     async def keys(self) -> List[bytes]:
         """Return existing keys."""
@@ -67,7 +67,7 @@ class DbmDatabaseAsync:
         def _func():
             return self._db.keys()
 
-        return await self._run_in_executor(_func)
+        return await self._run_in_thread(_func)
 
     async def set(self, key: Union[str, bytes], value: Union[str, bytes]) -> None:
         """Set key to hold the value.
@@ -77,8 +77,7 @@ class DbmDatabaseAsync:
         def _func():
             self._db[key] = value
 
-        await self.thread.run_soon_async(_func)
-        # await self._run_in_executor(_func)
+        await self._run_in_thread(_func)
 
     async def setdefault(self, key: Union[str, bytes], default: bytes) -> bytes:
         """Set key to hold the default value, if it does not yet exist.
@@ -88,12 +87,12 @@ class DbmDatabaseAsync:
         def _setdefault():
             return self._db.setdefault(key, default)
 
-        return await self._run_in_executor(_setdefault)
+        return await self._run_in_thread(_setdefault)
 
-    async def _run_in_executor(self, func) -> Any:
+    async def _run_in_thread(self, func) -> Any:
         async with self._lock:
-            # return await self._loop.run_in_executor(None, func)
-            return await asyncio.to_thread(func)
+            # return await asyncio.to_thread(func)
+            return await self.thread.run_soon_async(func)
 
 
 class GdbmDatabaseAsync(DbmDatabaseAsync):
@@ -105,7 +104,7 @@ class GdbmDatabaseAsync(DbmDatabaseAsync):
         def _func():
             return self._db.firstkey()
 
-        return await self._run_in_executor(_func)
+        return await self._run_in_thread(_func)
 
     async def nextkey(self, key: Union[str, bytes]) -> Optional[bytes]:
         """Return the next key, when looping over all keys.
@@ -115,7 +114,7 @@ class GdbmDatabaseAsync(DbmDatabaseAsync):
         def _func():
             return self._db.nextkey(key)
 
-        return await self._run_in_executor(_func)
+        return await self._run_in_thread(_func)
 
     async def reorganize(self) -> List[bytes]:
         """Reorganize the database."""
@@ -123,7 +122,7 @@ class GdbmDatabaseAsync(DbmDatabaseAsync):
         def _func():
             return self._db.reorganize()
 
-        return await self._run_in_executor(_func)
+        return await self._run_in_thread(_func)
 
     async def sync(self) -> List[bytes]:
         """When the database has been opened in fast mode,
@@ -133,7 +132,7 @@ class GdbmDatabaseAsync(DbmDatabaseAsync):
         def _func():
             return self._db.sync()
 
-        return await self._run_in_executor(_func)
+        return await self._run_in_thread(_func)
 
 
 @asynccontextmanager

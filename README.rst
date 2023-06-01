@@ -16,6 +16,8 @@ Description
 To ensure DBM can be used safely with AsyncIO, all DB operations are serialized,
 i.e. only one DB operation occurs at any given time.
 
+Note that the asyncio version is significantly slower then the normal version of DBM.
+
 This library is primarily made for GDBM, but should work with other implementations too.
 
 Usage
