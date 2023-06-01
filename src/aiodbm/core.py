@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, List, Optional, Union
 
+from .helpers import SingleWorkerThread
+
 
 class DbmDatabaseAsync:
     """A DBM database."""
@@ -12,6 +14,9 @@ class DbmDatabaseAsync:
         self._db = db
         self._loop = loop
         self._lock = asyncio.Lock()
+        loop = asyncio.get_running_loop()
+        self.thread = SingleWorkerThread(loop=loop)
+        self.thread.start()
 
     @property
     def _dbm_type_name(self) -> str:
@@ -72,7 +77,8 @@ class DbmDatabaseAsync:
         def _func():
             self._db[key] = value
 
-        await self._run_in_executor(_func)
+        await self.thread.run_soon_async(_func)
+        # await self._run_in_executor(_func)
 
     async def setdefault(self, key: Union[str, bytes], default: bytes) -> bytes:
         """Set key to hold the default value, if it does not yet exist.
@@ -86,7 +92,8 @@ class DbmDatabaseAsync:
 
     async def _run_in_executor(self, func) -> Any:
         async with self._lock:
-            return await self._loop.run_in_executor(None, func)
+            # return await self._loop.run_in_executor(None, func)
+            return await asyncio.to_thread(func)
 
 
 class GdbmDatabaseAsync(DbmDatabaseAsync):
