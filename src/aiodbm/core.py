@@ -2,7 +2,7 @@ import asyncio
 import dbm
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncGenerator, List, Optional, Union
+from typing import Any, List, Optional, Union
 
 
 class DbmDatabaseAsync:
@@ -122,9 +122,7 @@ class GdbmDatabaseAsync(DbmDatabaseAsync):
 
 
 @asynccontextmanager
-async def open(
-    *args, **kwargs
-) -> AsyncGenerator[DbmDatabaseAsync | GdbmDatabaseAsync, None]:
+async def open(*args, **kwargs):
     """Open the DBM database file and return a corresponding object."""
 
     def _open():

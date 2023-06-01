@@ -2,14 +2,13 @@
 aiodbm
 ======
 
-A AsyncIO wrapper for Python's DBM library.
+A AsyncIO wrapper for Python's `DBM library <https://docs.python.org/3/library/dbm.html>`_.
 
 * Supports 100% of GDBM API
 * Typing support
 * Docstrings for all methods
 
-Since all operations need to be awaited this API uses normal methods instead of dict like operations,
-e.g. get for fetching a value from a key and set to store it.
+To ensure DBM can be used "concurrently" with AsyncIO, all DB operations are serialized,
+i.e. only one DB operation occurs at any given time.
 
-This library is made for GDBM (the mostly used DBM implementation on Linux),
-so some method might fail when GDBM is not available.
+This library is primarily made for GDBM, but should work with other implementations too.
