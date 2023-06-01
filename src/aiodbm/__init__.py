@@ -2,6 +2,6 @@
 
 __version__ = "0.1.0dev1"
 
-from .core import GdbmDatabaseAsync, open, whichdb
+from .core import DbmDatabaseAsync, GdbmDatabaseAsync, open, whichdb
 
-__all__ = ["open", "whichdb", "GdbmDatabaseAsync"]
+__all__ = ["open", "whichdb", "DbmDatabaseAsync", "GdbmDatabaseAsync"]

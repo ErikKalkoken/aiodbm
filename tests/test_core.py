@@ -28,12 +28,19 @@ class TestDbmFunctions(DbmAsyncioTestCase):
 
 
 class TestDatabaseAsync(DbmAsyncioTestCase):
-    async def test_get_should_return_none_when_key_not_exists(self):
+    async def test_get_should_return_none_when_key_does_not_exists(self):
         async with aiodbm.open(self.data_path, "c") as db:
             # when
             result = await db.get("alpha")
             # then
             self.assertIsNone(result)
+
+    async def test_get_should_return_default_when_key_does_not_exists(self):
+        async with aiodbm.open(self.data_path, "c") as db:
+            # when
+            result = await db.get("alpha", b"yellow")
+            # then
+            self.assertEqual(result, b"yellow")
 
     async def test_close_should_close_the_db(self):
         async with aiodbm.open(self.data_path, "c") as db:

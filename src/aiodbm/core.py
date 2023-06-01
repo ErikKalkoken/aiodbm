@@ -2,10 +2,10 @@ import asyncio
 import dbm
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, List, Optional, Union
+from typing import Any, AsyncGenerator, List, Optional, Union
 
 
-class _DatabaseAsync:
+class DbmDatabaseAsync:
     """A DBM database."""
 
     def __init__(self, db, loop: asyncio.AbstractEventLoop) -> None:
@@ -14,18 +14,20 @@ class _DatabaseAsync:
         self._lock = asyncio.Lock()
 
     async def close(self) -> None:
-        """Close the database explicitly."""
+        """Close the database."""
 
         def _func():
             return self._db.close()
 
         return await self._run_in_executor(_func)
 
-    async def get(self, key: Union[str, bytes]) -> Optional[bytes]:
-        """Get the value of key. If the key does not exist, return None."""
+    async def get(
+        self, key: Union[str, bytes], default: Optional[bytes] = None
+    ) -> Optional[bytes]:
+        """Get the value of key. If the key does not exist, return default."""
 
         def _func():
-            return self._db.get(key)
+            return self._db.get(key, default)
 
         return await self._run_in_executor(_func)
 
@@ -79,8 +81,8 @@ class _DatabaseAsync:
             return await self._loop.run_in_executor(None, func)
 
 
-class GdbmDatabaseAsync(_DatabaseAsync):
-    """A DBM database."""
+class GdbmDatabaseAsync(DbmDatabaseAsync):
+    """A GDBM database."""
 
     async def firstkey(self) -> bytes:
         """Return the first key for looping over all keys."""
@@ -120,7 +122,9 @@ class GdbmDatabaseAsync(_DatabaseAsync):
 
 
 @asynccontextmanager
-async def open(*args, **kwargs):
+async def open(
+    *args, **kwargs
+) -> AsyncGenerator[DbmDatabaseAsync | GdbmDatabaseAsync, None]:
     """Open the DBM database file and return a corresponding object."""
 
     def _open():
@@ -131,12 +135,13 @@ async def open(*args, **kwargs):
 
     loop = asyncio.get_running_loop()
     db = await loop.run_in_executor(None, _open)
+
     dbm_variant = type(db).__name__
     try:
         if dbm_variant == "gdbm":
             yield GdbmDatabaseAsync(db, loop)
         else:
-            yield _DatabaseAsync(db, loop)
+            yield DbmDatabaseAsync(db, loop)
     finally:
         await loop.run_in_executor(None, _close, db)
 
