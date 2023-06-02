@@ -5,20 +5,27 @@ import queue
 import threading
 from functools import partial
 from pathlib import Path
-from typing import Any, Generator, List, Optional, Union
+from typing import Any, Callable, Generator, List, NamedTuple, Optional, Union
 
 logger = logging.getLogger("aiodbm")
 
 
-class Database(threading.Thread):
+class Message(NamedTuple):
+    """A message for the thread runner."""
+
+    future: asyncio.Future
+    func: Callable
+
+
+class DbmDatabase(threading.Thread):
     """A proxy for a DBM database."""
 
-    def __init__(self, connector) -> None:
+    def __init__(self, connector: Callable) -> None:
         super().__init__()
         self._running = True
         self._database = None
         self._connector = connector
-        self._tx = queue.Queue()
+        self._message_queue = queue.Queue()
 
     @property
     def _db(self):
@@ -47,21 +54,23 @@ class Database(threading.Thread):
             # even after database is closed (so we can finalize all
             # futures)
             try:
-                future, function = self._tx.get(timeout=0.1)
+                message: Message = self._message_queue.get(timeout=0.1)
             except queue.Empty:
                 if self._running:
                     continue
                 break
             try:
-                logger.debug("executing %s", function)
-                result = function()
-                logger.debug("operation %s completed", function)
+                logger.debug("executing %s", message.func)
+                result = message.func()
+                logger.debug("operation %s completed", message.func)
 
                 def set_result(fut, result):
                     if not fut.done():
                         fut.set_result(result)
 
-                future.get_loop().call_soon_threadsafe(set_result, future, result)
+                message.future.get_loop().call_soon_threadsafe(
+                    set_result, message.future, result
+                )
             except BaseException as e:
                 logger.debug("returning exception %s", e)
 
@@ -69,43 +78,49 @@ class Database(threading.Thread):
                     if not fut.done():
                         fut.set_exception(e)
 
-                future.get_loop().call_soon_threadsafe(set_exception, future, e)
+                message.future.get_loop().call_soon_threadsafe(
+                    set_exception, message.future, e
+                )
 
     async def _execute(self, fn, *args, **kwargs):
         """Queue a function with the given arguments for execution."""
         if not self._running or self._database is None:
             raise ValueError("Database closed")
 
-        function = partial(fn, *args, **kwargs)
+        func = partial(fn, *args, **kwargs)
         future = asyncio.get_event_loop().create_future()
 
-        self._tx.put_nowait((future, function))
+        self._message_queue.put_nowait(Message(future, func))
 
         return await future
 
-    async def _connect(self) -> "Database":
+    async def _connect(self) -> "DbmDatabase":
         """Connect to the actual DBM database."""
-        if self._database is None:
-            try:
-                future = asyncio.get_event_loop().create_future()
-                self._tx.put_nowait((future, self._connector))
-                self._database = await future
-            except Exception:
-                self._running = False
-                self._database = None
-                raise
+        if self._database is not None:
+            raise RuntimeError("Already connected")
+
+        try:
+            future = asyncio.get_event_loop().create_future()
+            self._message_queue.put_nowait(Message(future, self._connector))
+            self._database = await future
+        except Exception:
+            self._running = False
+            self._database = None
+            raise
 
         return self
 
-    def __await__(self) -> Generator[Any, None, "Database"]:
+    def __await__(self) -> Generator[Any, None, "DbmDatabase"]:
         self.start()
         return self._connect().__await__()
 
-    async def __aenter__(self) -> "Database":
+    async def __aenter__(self) -> "DbmDatabase":
         return await self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
+
+    # DBM API
 
     async def close(self) -> None:
         """Complete queued operations and close the database."""
@@ -201,14 +216,14 @@ def open(
     file: Union[str, Path],
     *args,
     **kwargs,
-) -> Database:
+) -> DbmDatabase:
     """Create and return a proxy to the DBM database."""
 
     def connector():
         filepath = str(file)
         return dbm.open(filepath, *args, **kwargs)
 
-    return Database(connector)
+    return DbmDatabase(connector)
 
 
 async def whichdb(filename: Union[str, Path]) -> Optional[str]:
