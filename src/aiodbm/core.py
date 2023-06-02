@@ -16,6 +16,9 @@ class Message(NamedTuple):
     future: asyncio.Future
     func: Callable
 
+    def __str__(self) -> str:
+        return str(self.func)
+
 
 class DbmDatabase(threading.Thread):
     """A proxy for a DBM database."""
@@ -60,9 +63,9 @@ class DbmDatabase(threading.Thread):
                     continue
                 break
             try:
-                logger.debug("executing %s", message.func)
+                logger.debug("executing %s", message)
                 result = message.func()
-                logger.debug("operation %s completed", message.func)
+                logger.debug("operation %s completed", message)
 
                 def set_result(fut, result):
                     if not fut.done():
@@ -88,7 +91,7 @@ class DbmDatabase(threading.Thread):
             raise ValueError("Database closed")
 
         func = partial(fn, *args, **kwargs)
-        future = asyncio.get_event_loop().create_future()
+        future = asyncio.get_running_loop().create_future()
 
         self._message_queue.put_nowait(Message(future, func))
 
@@ -100,7 +103,7 @@ class DbmDatabase(threading.Thread):
             raise RuntimeError("Already connected")
 
         try:
-            future = asyncio.get_event_loop().create_future()
+            future = asyncio.get_running_loop().create_future()
             self._message_queue.put_nowait(Message(future, self._connector))
             self._database = await future
         except Exception:

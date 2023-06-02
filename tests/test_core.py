@@ -1,12 +1,27 @@
+import asyncio
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 import aiodbm
+from aiodbm.core import Message
 
 python_version = f"{sys.version_info.major}{sys.version_info.minor}"
+
+
+class TestMessage(unittest.IsolatedAsyncioTestCase):
+    async def test_str(self):
+        def alpha():
+            pass
+
+        # given
+        future = asyncio.get_running_loop().create_future()
+        message = Message(future, alpha)
+        # then
+        self.assertIn("alpha", str(message))
 
 
 class DbmAsyncioTestCase(unittest.IsolatedAsyncioTestCase):
@@ -141,6 +156,21 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
             result = await db.setdefault("alpha", b"blue")
             # then
             self.assertEqual(result, b"green")
+
+    async def test_should_stop_thread_after_leaving_context(self):
+        async with aiodbm.open(self.data_path, "c") as db:
+            pass
+        # then
+        time.sleep(1)
+        self.assertFalse(db.is_alive())
+
+    async def test_should_stop_thread_when_closing(self):
+        async with aiodbm.open(self.data_path, "c") as db:
+            # when
+            await db.close()
+            # then
+            time.sleep(1)
+            self.assertFalse(db.is_alive())
 
 
 @unittest.skipIf(python_version in ["38", "39"], reason="Unsupported Python")
