@@ -41,7 +41,7 @@ class Message(NamedTuple):
         return cls(None, None, is_stop_signal=True)
 
 
-class DbmDatabase(threading.Thread):
+class Database(threading.Thread):
     """A proxy for a DBM database."""
 
     def __init__(self, connector: Callable) -> None:
@@ -50,10 +50,10 @@ class DbmDatabase(threading.Thread):
         self._connector = connector
         self._message_queue = queue.Queue()
 
-    def __await__(self) -> Generator[Any, None, "DbmDatabase"]:
+    def __await__(self) -> Generator[Any, None, "Database"]:
         return self._connect().__await__()
 
-    async def __aenter__(self) -> "DbmDatabase":
+    async def __aenter__(self) -> "Database":
         return await self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -76,7 +76,7 @@ class DbmDatabase(threading.Thread):
         """Return True if this is a GDBM database."""
         return self._dbm_type_name == "gdbm"
 
-    async def _connect(self) -> "DbmDatabase":
+    async def _connect(self) -> "Database":
         """Connect to the actual DBM database."""
         if self._database is not None:
             raise RuntimeError("Already connected")
@@ -134,7 +134,7 @@ class DbmDatabase(threading.Thread):
         stop_signal = Message.create_stop_signal()
         self._message_queue.put_nowait(stop_signal)
 
-    async def _execute(self, fn, *args, **kwargs):
+    async def _execute(self, fn, *args, **kwargs) -> Any:
         """Queue a function with the given arguments for execution in the runner."""
         if self._database is None:
             raise ValueError("Database closed")
@@ -163,7 +163,7 @@ class DbmDatabase(threading.Thread):
             self._database = None
             self._stop_runner()
 
-    async def delete(self, key: Union[str, bytes]):
+    async def delete(self, key: Union[str, bytes]) -> None:
         """Delete given key."""
 
         def _func():
@@ -214,39 +214,41 @@ class DbmDatabase(threading.Thread):
     # GDBM only API
 
     async def firstkey(self) -> bytes:
-        """Return the first key for looping over all keys."""
+        """Return the first key for looping over all keys. GDBM only."""
 
         return await self._execute(self._db.firstkey)
 
     async def nextkey(self, key: Union[str, bytes]) -> Optional[bytes]:
         """Return the next key, when looping over all keys.
         Or return None, when the end of the loop has been reached.
+        GDBM only.
         """
 
         return await self._execute(self._db.nextkey, key)
 
     async def reorganize(self) -> None:
-        """Reorganize the database."""
+        """Reorganize the database. GDBM only."""
 
         await self._execute(self._db.reorganize)
 
     async def sync(self) -> None:
         """When the database has been opened in fast mode,
         this method forces any unwritten data to be written to the disk.
+        GDBM only.
         """
 
         await self._execute(self._db.sync)
 
 
-def open(file: Union[str, Path], *args, **kwargs) -> DbmDatabase:
+def open(file: Union[str, Path], *args, **kwargs) -> Database:
     """Create and return a proxy to the DBM database.
 
     Example:
 
     .. code-block:: Python
 
-    async with open("example.dbm", "c") as db:
-        ...
+        async with open("example.dbm", "c") as db:
+            ...
 
     Args:
         file: filename for the DBM database
@@ -259,7 +261,7 @@ def open(file: Union[str, Path], *args, **kwargs) -> DbmDatabase:
         filepath = str(file)
         return dbm.open(filepath, *args, **kwargs)
 
-    return DbmDatabase(connector)
+    return Database(connector)
 
 
 async def whichdb(filename: Union[str, Path]) -> Optional[str]:
@@ -270,8 +272,6 @@ async def whichdb(filename: Union[str, Path]) -> Optional[str]:
     Or if the file is not in a known DBM format, return an empty string.
     """
 
-    def _func():
-        return dbm.whichdb(str(filename))
-
+    filename_str = str(filename)
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _func)
+    return await loop.run_in_executor(None, dbm.whichdb, filename_str)

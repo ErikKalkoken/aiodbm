@@ -1,22 +1,22 @@
-======
-aiodbm
-======
+=======================
+aiodbm: DBM for AsyncIO
+=======================
 
-A AsyncIO wrapper for Python's `DBM library <https://docs.python.org/3/library/dbm.html>`_.
+An AsyncIO bridge for Python's DBM library.
 
 |release| |python| |tests| |codecov| |docs| |pre-commit| |Code style: black|
 
 Description
 -----------
 
-* Supports 100% of GDBM API
+* Supports 100% of DBM and GDBM API
 * Typing support
 * Docstrings for all methods
+* Good test coverage
 
-To ensure DBM can be used safely with AsyncIO, all DB operations are serialized,
-i.e. only one DB operation occurs at any given time.
+To ensure DBM can be used safely with AsyncIO, all DB operations are serialized and run in a separate thread.
 
-This library is primarily made for GDBM, but should work with other implementations too.
+This library is developed and tested primarily with GDBM, but should work with other implementations too.
 
 Usage
 -----
@@ -49,6 +49,12 @@ You can install this library directly from PyPI with the following command:
 .. code:: shell
 
     pip install aiodbm
+
+
+Reference
+---------
+
+See also Python's `DBM documentation <https://docs.python.org/3/library/dbm.html>`_
 
 
 .. |release| image:: https://img.shields.io/pypi/v/aiodbm?label=release
