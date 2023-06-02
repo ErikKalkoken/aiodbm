@@ -15,9 +15,14 @@ class Message(NamedTuple):
 
     future: asyncio.Future
     func: Callable
+    is_stop_signal: bool = False
 
     def __str__(self) -> str:
         return str(self.func)
+
+    @classmethod
+    def create_stop_signal(cls) -> "Message":
+        return cls(None, None, is_stop_signal=True)
 
 
 class DbmDatabase(threading.Thread):
@@ -25,7 +30,6 @@ class DbmDatabase(threading.Thread):
 
     def __init__(self, connector: Callable) -> None:
         super().__init__()
-        self._running = True
         self._database = None
         self._connector = connector
         self._message_queue = queue.Queue()
@@ -56,11 +60,8 @@ class DbmDatabase(threading.Thread):
             # Continues running until all queue items are processed,
             # even after database is closed (so we can finalize all
             # futures)
-            try:
-                message: Message = self._message_queue.get(timeout=0.1)
-            except queue.Empty:
-                if self._running:
-                    continue
+            message: Message = self._message_queue.get()
+            if message.is_stop_signal:
                 break
 
             logger.debug("executing %s", message)
@@ -87,9 +88,13 @@ class DbmDatabase(threading.Thread):
                     set_result, message.future, result
                 )
 
+    def stop_runner(self):
+        stop_signal = Message.create_stop_signal()
+        self._message_queue.put_nowait(stop_signal)
+
     async def _execute(self, fn, *args, **kwargs):
         """Queue a function with the given arguments for execution."""
-        if not self._running or self._database is None:
+        if self._database is None:
             raise ValueError("Database closed")
 
         func = partial(fn, *args, **kwargs)
@@ -109,7 +114,6 @@ class DbmDatabase(threading.Thread):
             self._message_queue.put_nowait(Message(future, self._connector))
             self._database = await future
         except Exception:
-            self._running = False
             self._database = None
             raise
 
@@ -139,8 +143,8 @@ class DbmDatabase(threading.Thread):
             logger.warning("exception occurred while closing database")
             raise
         finally:
-            self._running = False
             self._database = None
+            self.stop_runner()
 
     async def delete(self, key: Union[str, bytes]):
         """Delete given key."""
