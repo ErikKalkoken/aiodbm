@@ -46,6 +46,15 @@ class DbmDatabase(threading.Thread):
         self._connector = connector
         self._message_queue = queue.Queue()
 
+    def __await__(self) -> Generator[Any, None, "DbmDatabase"]:
+        return self._connect().__await__()
+
+    async def __aenter__(self) -> "DbmDatabase":
+        return await self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()
+
     @property
     def _db(self):
         if self._database is None:
@@ -62,16 +71,31 @@ class DbmDatabase(threading.Thread):
         """Return True if this is a GDBM database."""
         return self._dbm_type_name == "gdbm"
 
+    async def _connect(self) -> "DbmDatabase":
+        """Connect to the actual DBM database."""
+        if self._database is not None:
+            raise RuntimeError("Already connected")
+
+        self.start()
+        try:
+            future = asyncio.get_running_loop().create_future()
+            self._message_queue.put_nowait(Message(future, self._connector))
+            self._database = await future
+        except Exception:
+            self._database = None
+            self._stop_runner()
+            raise
+
+        return self
+
     def run(self) -> None:
         """
         Execute function calls on a separate thread.
 
         :meta private:
         """
-        while True:
-            # Continues running until all queue items are processed,
-            # even after database is closed (so we can finalize all
-            # futures)
+
+        while True:  # Continues running until stop signal is received
             message: Message = self._message_queue.get()
             if message.is_stop_signal:
                 break
@@ -106,7 +130,7 @@ class DbmDatabase(threading.Thread):
         self._message_queue.put_nowait(stop_signal)
 
     async def _execute(self, fn, *args, **kwargs):
-        """Queue a function with the given arguments for execution."""
+        """Queue a function with the given arguments for execution in the runner."""
         if self._database is None:
             raise ValueError("Database closed")
 
@@ -116,31 +140,6 @@ class DbmDatabase(threading.Thread):
         self._message_queue.put_nowait(Message(future, func))
 
         return await future
-
-    async def _connect(self) -> "DbmDatabase":
-        """Connect to the actual DBM database."""
-        if self._database is not None:
-            raise RuntimeError("Already connected")
-
-        try:
-            future = asyncio.get_running_loop().create_future()
-            self._message_queue.put_nowait(Message(future, self._connector))
-            self._database = await future
-        except Exception:
-            self._database = None
-            raise
-
-        return self
-
-    def __await__(self) -> Generator[Any, None, "DbmDatabase"]:
-        self.start()
-        return self._connect().__await__()
-
-    async def __aenter__(self) -> "DbmDatabase":
-        return await self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        await self.close()
 
     # DBM API
 
@@ -234,15 +233,21 @@ class DbmDatabase(threading.Thread):
         await self._execute(self._db.sync)
 
 
-def open(
-    file: Union[str, Path],
-    *args,
-    **kwargs,
-) -> DbmDatabase:
+def open(file: Union[str, Path], *args, **kwargs) -> DbmDatabase:
     """Create and return a proxy to the DBM database.
+
+    Example:
+
+    .. code-block:: Python
+
+    async with open("example.dbm", "c") as db:
+        ...
 
     Args:
         file: filename for the DBM database
+
+    Returns:
+        DBM database proxy object
     """
 
     def connector():

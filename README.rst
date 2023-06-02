@@ -31,7 +31,7 @@ Here is a basic example on how to use the queue:
 
 
     async def main():
-        async with aiodbm.open("data.dbm", "c") as db:  # opening/creating database
+        async with aiodbm.open("example.dbm", "c") as db:  # opening/creating database
             await db.set("alpha", "green")  # creating new key alpha with value green
             value = await db.get("alpha")  # fetching value for key alpha
             print(value)
