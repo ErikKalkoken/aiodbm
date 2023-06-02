@@ -1,3 +1,5 @@
+"""Core logic for an async DBM proxy."""
+
 import asyncio
 import dbm
 import logging
@@ -150,7 +152,6 @@ class DbmDatabase(threading.Thread):
         """Complete queued operations and close the database."""
 
         if self._database is None:
-            self._stop_runner()
             return
 
         try:

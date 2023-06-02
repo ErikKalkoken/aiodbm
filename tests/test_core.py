@@ -202,6 +202,13 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
         with self.assertRaises(dbm.error):
             await aiodbm.open(self.data_path, "r")
 
+    async def test_can_call_close_multiple_timers(self):
+        # given
+        db = await aiodbm.open(self.data_path, "c")
+        await db.close()
+        # when/then
+        await db.close()
+
 
 @unittest.skipIf(python_version in ["38", "39"], reason="Unsupported Python")
 class TestGdbmFunctions(DbmAsyncioTestCase):
