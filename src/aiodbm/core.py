@@ -62,9 +62,21 @@ class DbmDatabase(threading.Thread):
                 if self._running:
                     continue
                 break
+
+            logger.debug("executing %s", message)
             try:
-                logger.debug("executing %s", message)
                 result = message.func()
+            except BaseException as ex:
+                logger.debug("returning exception %s", ex)
+
+                def set_exception(fut, e):
+                    if not fut.done():
+                        fut.set_exception(e)
+
+                message.future.get_loop().call_soon_threadsafe(
+                    set_exception, message.future, ex
+                )
+            else:
                 logger.debug("operation %s completed", message)
 
                 def set_result(fut, result):
@@ -73,16 +85,6 @@ class DbmDatabase(threading.Thread):
 
                 message.future.get_loop().call_soon_threadsafe(
                     set_result, message.future, result
-                )
-            except BaseException as e:
-                logger.debug("returning exception %s", e)
-
-                def set_exception(fut, e):
-                    if not fut.done():
-                        fut.set_exception(e)
-
-                message.future.get_loop().call_soon_threadsafe(
-                    set_exception, message.future, e
                 )
 
     async def _execute(self, fn, *args, **kwargs):
