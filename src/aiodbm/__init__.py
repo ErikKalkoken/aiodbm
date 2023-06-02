@@ -1,7 +1,7 @@
 """A AsyncIO wrapper for DBM."""
 
-__version__ = "0.1.0a1"
+__version__ = "0.2.0dev1"
 
-from .core import DbmDatabaseAsync, GdbmDatabaseAsync, open, whichdb
+from .core import Database, open, whichdb
 
-__all__ = ["open", "whichdb", "DbmDatabaseAsync", "GdbmDatabaseAsync"]
+__all__ = ["open", "Database", "whichdb"]
