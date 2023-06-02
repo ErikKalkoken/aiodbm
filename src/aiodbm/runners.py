@@ -71,7 +71,7 @@ class ThreadRunner(threading.Thread):
         args=...,
         kwargs=None,
     ) -> None:
-        super().__init__(group, None, name, args, kwargs)
+        super().__init__(group, None, name, args, kwargs, daemon=True)
         self._input_queue = queue.Queue()
         self._loop = loop
         self._finalizer = weakref.finalize(self, self.stop)

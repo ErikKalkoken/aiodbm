@@ -143,11 +143,20 @@ async def open(*args, **kwargs):
     def _open():
         return dbm.open(*args, **kwargs)
 
-    loop = asyncio.get_running_loop()
-    runner = ThreadRunner(loop=loop)
-    runner.start()
-    db = await runner.run_soon_async(_open)
+    try:
+        open._runners
+    except AttributeError:
+        open._runners = {}
 
+    loop = asyncio.get_running_loop()
+    if loop in open._runners:
+        runner = open._runners[loop]
+    else:
+        runner = ThreadRunner(loop=loop)
+        open._runners[loop] = runner
+        runner.start()
+
+    db = await runner.run_soon_async(_open)
     dbm_variant = type(db).__name__
     try:
         if dbm_variant == "gdbm":
@@ -156,7 +165,6 @@ async def open(*args, **kwargs):
             yield DbmDatabaseAsync(db, loop, runner)
     finally:
         await runner.run_soon_async(db.close)
-        runner.stop()
 
 
 async def whichdb(filename: Union[str, Path]) -> Optional[str]:
