@@ -1,12 +1,48 @@
+import asyncio
+import dbm
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 import aiodbm
+from aiodbm.core import Message
 
 python_version = f"{sys.version_info.major}{sys.version_info.minor}"
+
+
+class TestMessage(unittest.IsolatedAsyncioTestCase):
+    async def test_str(self):
+        def alpha():
+            pass
+
+        # given
+        future = asyncio.get_running_loop().create_future()
+        message = Message(future, alpha)
+        # then
+        self.assertIn("alpha", str(message))
+
+    def test_can_create_stop_signal(self):
+        # when
+        message = Message.create_stop_signal()
+        # then
+        self.assertTrue(message.is_stop_signal)
+
+    def test_future_strict_raises_error_when_no_future(self):
+        # given
+        message = Message.create_stop_signal()
+        # when/then
+        with self.assertRaises(ValueError):
+            message.future_strict
+
+    def test_func_strict_raises_error_when_no_func(self):
+        # given
+        message = Message.create_stop_signal()
+        # when/then
+        with self.assertRaises(ValueError):
+            message.func_strict
 
 
 class DbmAsyncioTestCase(unittest.IsolatedAsyncioTestCase):
@@ -141,6 +177,37 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
             result = await db.setdefault("alpha", b"blue")
             # then
             self.assertEqual(result, b"green")
+
+    async def test_should_stop_thread_after_leaving_context(self):
+        async with aiodbm.open(self.data_path, "c") as db:
+            pass
+        # then
+        time.sleep(1)
+        self.assertFalse(db.is_alive())
+
+    async def test_should_stop_thread_when_closing(self):
+        async with aiodbm.open(self.data_path, "c") as db:
+            # when
+            await db.close()
+            # then
+            time.sleep(1)
+            self.assertFalse(db.is_alive())
+
+    async def test_can_open_without_context_manager(self):
+        db = await aiodbm.open(self.data_path, "c")
+        await db.get("dummy")
+        await db.close()
+
+    async def test_open_raises_exception_when_opening_fails(self):
+        with self.assertRaises(dbm.error):
+            await aiodbm.open(self.data_path, "r")
+
+    async def test_can_call_close_multiple_timers(self):
+        # given
+        db = await aiodbm.open(self.data_path, "c")
+        await db.close()
+        # when/then
+        await db.close()
 
 
 @unittest.skipIf(python_version in ["38", "39"], reason="Unsupported Python")

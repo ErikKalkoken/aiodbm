@@ -1,17 +1,71 @@
+"""Core logic for an async DBM proxy."""
+
 import asyncio
 import dbm
-from contextlib import asynccontextmanager
+import logging
+import queue
+import threading
+from functools import partial
 from pathlib import Path
-from typing import Any, List, Optional, Union
+from typing import Any, Callable, Generator, List, NamedTuple, Optional, Union
+
+logger = logging.getLogger("aiodbm")
 
 
-class DbmDatabaseAsync:
-    """A DBM database."""
+class Message(NamedTuple):
+    """A queue message."""
 
-    def __init__(self, db, loop: asyncio.AbstractEventLoop) -> None:
-        self._db = db
-        self._loop = loop
-        self._lock = asyncio.Lock()
+    future: Optional[asyncio.Future]
+    func: Optional[Callable]
+    is_stop_signal: bool = False
+
+    @property
+    def future_strict(self) -> asyncio.Future:
+        """Return future only if it exists, else raise exception."""
+        if self.future is None:
+            raise ValueError("No future")
+        return self.future
+
+    @property
+    def func_strict(self) -> Callable:
+        """Return function only if it exists, else raise exception."""
+        if self.func is None:
+            raise ValueError("No func")
+        return self.func
+
+    def __str__(self) -> str:
+        return str(self.func)
+
+    @classmethod
+    def create_stop_signal(cls) -> "Message":
+        return cls(None, None, is_stop_signal=True)
+
+
+class DbmDatabase(threading.Thread):
+    """A proxy for a DBM database."""
+
+    def __init__(self, connector: Callable) -> None:
+        super().__init__()
+        self._database = None
+        self._connector = connector
+        self._message_queue = queue.Queue()
+
+    def __await__(self) -> Generator[Any, None, "DbmDatabase"]:
+        return self._connect().__await__()
+
+    async def __aenter__(self) -> "DbmDatabase":
+        return await self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()
+
+    @property
+    def _db(self):
+        """Return current database if one exists, else raise exception."""
+        if self._database is None:
+            raise ValueError("no active database")
+
+        return self._database
 
     @property
     def _dbm_type_name(self) -> str:
@@ -19,34 +73,106 @@ class DbmDatabaseAsync:
 
     @property
     def is_gdbm(self) -> bool:
+        """Return True if this is a GDBM database."""
         return self._dbm_type_name == "gdbm"
 
+    async def _connect(self) -> "DbmDatabase":
+        """Connect to the actual DBM database."""
+        if self._database is not None:
+            raise RuntimeError("Already connected")
+
+        self.start()
+        try:
+            future = asyncio.get_running_loop().create_future()
+            self._message_queue.put_nowait(Message(future, self._connector))
+            self._database = await future
+        except Exception:
+            self._database = None
+            self._stop_runner()
+            raise
+
+        return self
+
+    def run(self) -> None:
+        """
+        Execute function calls on a separate thread.
+
+        :meta private:
+        """
+
+        while True:  # Continues running until stop signal is received
+            message: Message = self._message_queue.get()
+            if message.is_stop_signal:
+                break
+
+            logger.debug("executing %s", message)
+            try:
+                result = message.func_strict()
+            except BaseException as ex:
+                logger.debug("returning exception %s", ex)
+
+                def set_exception(fut, e):
+                    if not fut.done():
+                        fut.set_exception(e)
+
+                message.future_strict.get_loop().call_soon_threadsafe(
+                    set_exception, message.future_strict, ex
+                )
+            else:
+                logger.debug("operation %s completed", message)
+
+                def set_result(fut, result):
+                    if not fut.done():
+                        fut.set_result(result)
+
+                message.future_strict.get_loop().call_soon_threadsafe(
+                    set_result, message.future_strict, result
+                )
+
+    def _stop_runner(self):
+        """Stop the thread runner."""
+        stop_signal = Message.create_stop_signal()
+        self._message_queue.put_nowait(stop_signal)
+
+    async def _execute(self, fn, *args, **kwargs):
+        """Queue a function with the given arguments for execution in the runner."""
+        if self._database is None:
+            raise ValueError("Database closed")
+
+        func = partial(fn, *args, **kwargs)
+        future = asyncio.get_running_loop().create_future()
+
+        self._message_queue.put_nowait(Message(future, func))
+
+        return await future
+
+    # DBM API
+
     async def close(self) -> None:
-        """Close the database."""
+        """Complete queued operations and close the database."""
 
-        def _func():
-            return self._db.close()
+        if self._database is None:
+            return
 
-        return await self._run_in_executor(_func)
-
-    async def get(
-        self, key: Union[str, bytes], default: Optional[bytes] = None
-    ) -> Optional[bytes]:
-        """Get the value of key. If the key does not exist, return default."""
-
-        def _func():
-            return self._db.get(key, default)
-
-        return await self._run_in_executor(_func)
+        try:
+            await self._execute(self._db.close)
+        except Exception:
+            logger.warning("exception occurred while closing database")
+            raise
+        finally:
+            self._database = None
+            self._stop_runner()
 
     async def delete(self, key: Union[str, bytes]):
+        """Delete given key."""
+
         def _func():
             try:
                 del self._db[key]
             except KeyError as ex:
                 raise KeyError(f"Key {key} does not exist") from ex
 
-        await self._run_in_executor(_func)
+        return await self._execute(_func)
 
     async def exists(self, key: Union[str, bytes]) -> bool:
         """Return True when the given key exists, else False."""
@@ -54,102 +180,86 @@ class DbmDatabaseAsync:
         def _func():
             return key in self._db
 
-        return await self._run_in_executor(_func)
+        return await self._execute(_func)
+
+    async def get(
+        self, key: Union[str, bytes], default: Optional[bytes] = None
+    ) -> Optional[bytes]:
+        """Get the value of key. If the key does not exist, return default."""
+
+        return await self._execute(self._db.get, key, default)
 
     async def keys(self) -> List[bytes]:
         """Return existing keys."""
 
-        def _func():
-            return self._db.keys()
-
-        return await self._run_in_executor(_func)
+        return await self._execute(self._db.keys)
 
     async def set(self, key: Union[str, bytes], value: Union[str, bytes]) -> None:
         """Set key to hold the value.
         If key already holds a value, it is overwritten.
         """
 
-        def _func():
+        def _set():
             self._db[key] = value
 
-        await self._run_in_executor(_func)
+        await self._execute(_set)
 
     async def setdefault(self, key: Union[str, bytes], default: bytes) -> bytes:
         """Set key to hold the default value, if it does not yet exist.
         Or return current value of existing key.
         """
 
-        def _setdefault():
-            return self._db.setdefault(key, default)
+        return await self._execute(self._db.setdefault, key, default)
 
-        return await self._run_in_executor(_setdefault)
-
-    async def _run_in_executor(self, func) -> Any:
-        async with self._lock:
-            return await self._loop.run_in_executor(None, func)
-
-
-class GdbmDatabaseAsync(DbmDatabaseAsync):
-    """A GDBM database."""
+    # GDBM only API
 
     async def firstkey(self) -> bytes:
         """Return the first key for looping over all keys."""
 
-        def _func():
-            return self._db.firstkey()
-
-        return await self._run_in_executor(_func)
+        return await self._execute(self._db.firstkey)
 
     async def nextkey(self, key: Union[str, bytes]) -> Optional[bytes]:
         """Return the next key, when looping over all keys.
         Or return None, when the end of the loop has been reached.
         """
 
-        def _func():
-            return self._db.nextkey(key)
+        return await self._execute(self._db.nextkey, key)
 
-        return await self._run_in_executor(_func)
-
-    async def reorganize(self) -> List[bytes]:
+    async def reorganize(self) -> None:
         """Reorganize the database."""
 
-        def _func():
-            return self._db.reorganize()
+        await self._execute(self._db.reorganize)
 
-        return await self._run_in_executor(_func)
-
-    async def sync(self) -> List[bytes]:
+    async def sync(self) -> None:
         """When the database has been opened in fast mode,
         this method forces any unwritten data to be written to the disk.
         """
 
-        def _func():
-            return self._db.sync()
-
-        return await self._run_in_executor(_func)
+        await self._execute(self._db.sync)
 
 
-@asynccontextmanager
-async def open(*args, **kwargs):
-    """Open the DBM database file and return a corresponding object."""
+def open(file: Union[str, Path], *args, **kwargs) -> DbmDatabase:
+    """Create and return a proxy to the DBM database.
 
-    def _open():
-        return dbm.open(*args, **kwargs)
+    Example:
 
-    def _close(db):
-        return db.close()
+    .. code-block:: Python
 
-    loop = asyncio.get_running_loop()
-    db = await loop.run_in_executor(None, _open)
+    async with open("example.dbm", "c") as db:
+        ...
 
-    dbm_variant = type(db).__name__
-    try:
-        if dbm_variant == "gdbm":
-            yield GdbmDatabaseAsync(db, loop)
-        else:
-            yield DbmDatabaseAsync(db, loop)
-    finally:
-        await loop.run_in_executor(None, _close, db)
+    Args:
+        file: filename for the DBM database
+
+    Returns:
+        DBM database proxy object
+    """
+
+    def connector():
+        filepath = str(file)
+        return dbm.open(filepath, *args, **kwargs)
+
+    return DbmDatabase(connector)
 
 
 async def whichdb(filename: Union[str, Path]) -> Optional[str]:
