@@ -11,7 +11,7 @@ logger = logging.getLogger("aiodbm")
 
 
 class Message(NamedTuple):
-    """A message for the thread runner."""
+    """A queue message."""
 
     future: Optional[asyncio.Future]
     func: Optional[Callable]
@@ -100,7 +100,8 @@ class DbmDatabase(threading.Thread):
                     set_result, message.future_safe, result
                 )
 
-    def stop_runner(self):
+    def _stop_runner(self):
+        """Stop the thread runner."""
         stop_signal = Message.create_stop_signal()
         self._message_queue.put_nowait(stop_signal)
 
@@ -156,7 +157,7 @@ class DbmDatabase(threading.Thread):
             raise
         finally:
             self._database = None
-            self.stop_runner()
+            self._stop_runner()
 
     async def delete(self, key: Union[str, bytes]):
         """Delete given key."""
@@ -238,7 +239,11 @@ def open(
     *args,
     **kwargs,
 ) -> DbmDatabase:
-    """Create and return a proxy to the DBM database."""
+    """Create and return a proxy to the DBM database.
+
+    Args:
+        file: filename for the DBM database
+    """
 
     def connector():
         filepath = str(file)

@@ -23,6 +23,12 @@ class TestMessage(unittest.IsolatedAsyncioTestCase):
         # then
         self.assertIn("alpha", str(message))
 
+    def test_can_create_stop_signal(self):
+        # when
+        message = Message.create_stop_signal()
+        # then
+        self.assertTrue(message.is_stop_signal)
+
 
 class DbmAsyncioTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
@@ -171,6 +177,11 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
             # then
             time.sleep(1)
             self.assertFalse(db.is_alive())
+
+    async def test_can_open_without_context_manager(self):
+        db = await aiodbm.open(self.data_path, "c")
+        await db.get("dummy")
+        await db.close()
 
 
 @unittest.skipIf(python_version in ["38", "39"], reason="Unsupported Python")
