@@ -13,9 +13,21 @@ logger = logging.getLogger("aiodbm")
 class Message(NamedTuple):
     """A message for the thread runner."""
 
-    future: asyncio.Future
-    func: Callable
+    future: Optional[asyncio.Future]
+    func: Optional[Callable]
     is_stop_signal: bool = False
+
+    @property
+    def future_safe(self) -> asyncio.Future:
+        if self.future is None:
+            raise ValueError("No future")
+        return self.future
+
+    @property
+    def func_safe(self) -> Callable:
+        if self.func is None:
+            raise ValueError("No func")
+        return self.func
 
     def __str__(self) -> str:
         return str(self.func)
@@ -66,7 +78,7 @@ class DbmDatabase(threading.Thread):
 
             logger.debug("executing %s", message)
             try:
-                result = message.func()
+                result = message.func_safe()
             except BaseException as ex:
                 logger.debug("returning exception %s", ex)
 
@@ -74,8 +86,8 @@ class DbmDatabase(threading.Thread):
                     if not fut.done():
                         fut.set_exception(e)
 
-                message.future.get_loop().call_soon_threadsafe(
-                    set_exception, message.future, ex
+                message.future_safe.get_loop().call_soon_threadsafe(
+                    set_exception, message.future_safe, ex
                 )
             else:
                 logger.debug("operation %s completed", message)
@@ -84,8 +96,8 @@ class DbmDatabase(threading.Thread):
                     if not fut.done():
                         fut.set_result(result)
 
-                message.future.get_loop().call_soon_threadsafe(
-                    set_result, message.future, result
+                message.future_safe.get_loop().call_soon_threadsafe(
+                    set_result, message.future_safe, result
                 )
 
     def stop_runner(self):
