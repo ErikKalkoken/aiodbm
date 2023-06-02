@@ -18,13 +18,15 @@ class Message(NamedTuple):
     is_stop_signal: bool = False
 
     @property
-    def future_safe(self) -> asyncio.Future:
+    def future_strict(self) -> asyncio.Future:
+        """Return future only if it exists, else raise exception."""
         if self.future is None:
             raise ValueError("No future")
         return self.future
 
     @property
-    def func_safe(self) -> Callable:
+    def func_strict(self) -> Callable:
+        """Return function only if it exists, else raise exception."""
         if self.func is None:
             raise ValueError("No func")
         return self.func
@@ -57,6 +59,7 @@ class DbmDatabase(threading.Thread):
 
     @property
     def _db(self):
+        """Return current database if one exists, else raise exception."""
         if self._database is None:
             raise ValueError("no active database")
 
@@ -102,7 +105,7 @@ class DbmDatabase(threading.Thread):
 
             logger.debug("executing %s", message)
             try:
-                result = message.func_safe()
+                result = message.func_strict()
             except BaseException as ex:
                 logger.debug("returning exception %s", ex)
 
@@ -110,8 +113,8 @@ class DbmDatabase(threading.Thread):
                     if not fut.done():
                         fut.set_exception(e)
 
-                message.future_safe.get_loop().call_soon_threadsafe(
-                    set_exception, message.future_safe, ex
+                message.future_strict.get_loop().call_soon_threadsafe(
+                    set_exception, message.future_strict, ex
                 )
             else:
                 logger.debug("operation %s completed", message)
@@ -120,8 +123,8 @@ class DbmDatabase(threading.Thread):
                     if not fut.done():
                         fut.set_result(result)
 
-                message.future_safe.get_loop().call_soon_threadsafe(
-                    set_result, message.future_safe, result
+                message.future_strict.get_loop().call_soon_threadsafe(
+                    set_result, message.future_strict, result
                 )
 
     def _stop_runner(self):
@@ -147,6 +150,7 @@ class DbmDatabase(threading.Thread):
         """Complete queued operations and close the database."""
 
         if self._database is None:
+            self._stop_runner()
             return
 
         try:

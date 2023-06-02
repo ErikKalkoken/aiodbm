@@ -1,4 +1,5 @@
 import asyncio
+import dbm
 import shutil
 import sys
 import tempfile
@@ -28,6 +29,20 @@ class TestMessage(unittest.IsolatedAsyncioTestCase):
         message = Message.create_stop_signal()
         # then
         self.assertTrue(message.is_stop_signal)
+
+    def test_future_strict_raises_error_when_no_future(self):
+        # given
+        message = Message.create_stop_signal()
+        # when/then
+        with self.assertRaises(ValueError):
+            message.future_strict
+
+    def test_func_strict_raises_error_when_no_func(self):
+        # given
+        message = Message.create_stop_signal()
+        # when/then
+        with self.assertRaises(ValueError):
+            message.func_strict
 
 
 class DbmAsyncioTestCase(unittest.IsolatedAsyncioTestCase):
@@ -182,6 +197,10 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
         db = await aiodbm.open(self.data_path, "c")
         await db.get("dummy")
         await db.close()
+
+    async def test_open_raises_exception_when_opening_fails(self):
+        with self.assertRaises(dbm.error):
+            await aiodbm.open(self.data_path, "r")
 
 
 @unittest.skipIf(python_version in ["38", "39"], reason="Unsupported Python")
