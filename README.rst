@@ -9,14 +9,34 @@ An AsyncIO bridge for Python's DBM library.
 Description
 -----------
 
-* Supports 100% of DBM and GDBM API
+aiodbm is a library that allows you to use DBM in asyncio code.
+
+* Full coverage of Python's DBM and GDBM API
+* Shared single thread implementation for best asyncio performance
 * Typing support
-* Docstrings for all methods
-* Good test coverage
+* Docstrings and documentation
+* Fully tested
 
-To ensure DBM can be used safely with AsyncIO, all DB operations are serialized and run in a separate thread.
+Why use DBM?
+------------
 
-This library is developed and tested primarily with GDBM, but should work with other implementations too.
+DBM is a fast, embedded key-value store.
+It is supported by Python's standard library [1]_ and can be used on most systems without requiring additional dependencies [2]_.
+
+Compared to Sqlite - the other popular embedded database support by Python's standard library - it can be significantly faster,
+but also does not provide any of sqlite's advanced features like transactions or process safety. [3]_
+
+If you are are looking for a simple and fast key-value store (e.g. for caching) - especially on Linux systems,
+where the GDBM variant is available - DBM can be a good solution.
+
+Caveats
+-------
+
+While Python's DBM library should ensure, that aiodbm works with any DBM variant and on any system,
+this library has been developed and tested primarily with GDBM on Linux.
+On non Linux-like systems Python might use it's "dumb" DBM implementation, which will be much slower.
+
+DBM is not process safe. If you need a key-value store in a multi process context (e.g. a web server running with gunicorn) we'd recommend to use Redis or something similar instead.
 
 Usage
 -----
@@ -50,12 +70,14 @@ You can install this library directly from PyPI with the following command:
 
     pip install aiodbm
 
+------------
 
-Reference
----------
+.. [1] Python's DBM module: https://docs.python.org/3/library/dbm.html
+.. [2] The newer DBM variants GDBM or NDBM are preinstalled on most Linux/Unix systems: https://en.wikipedia.org/wiki/DBM_(computing)#Availability
+.. [3] Python benchmark with DBM, Sqlite and other embedded databases: https://charlesleifer.com/blog/completely-un-scientific-benchmarks-of-some-embedded-databases-with-python/
 
-See also Python's `DBM documentation <https://docs.python.org/3/library/dbm.html>`_
-
+.. _DBM: https://en.wikipedia.org/wiki/DBM_(computing)
+.. _benchmark: https://charlesleifer.com/blog/completely-un-scientific-benchmarks-of-some-embedded-databases-with-python/
 
 .. |release| image:: https://img.shields.io/pypi/v/aiodbm?label=release
    :target: https://pypi.org/project/aiodbm/
