@@ -6,6 +6,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 import aiodbm
 from aiodbm.core import Message
@@ -48,7 +49,7 @@ class TestMessage(unittest.IsolatedAsyncioTestCase):
 class DbmAsyncioTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.temp_dir = Path(tempfile.mkdtemp())
-        self.data_path = str(self.temp_dir / "data.dbm")
+        self.data_path = str(self.temp_dir / "data.dat")
 
     def tearDown(self) -> None:
         shutil.rmtree(self.temp_dir, ignore_errors=True)
@@ -64,6 +65,15 @@ class TestDbmFunctions(DbmAsyncioTestCase):
         result = await aiodbm.whichdb(self.data_path)
         # then
         self.assertIn(result, ["dbm.gnu", "dbm.ndbm", "dbm.dumb"])
+
+
+class TestDatabase(unittest.TestCase):
+    def test_should_raise_error_when_no_database_configured(self):
+        # given
+        db = aiodbm.Database(Mock())
+        # when/then
+        with self.assertRaises(ValueError):
+            db._db_strict
 
 
 class TestDatabaseAsync(DbmAsyncioTestCase):
@@ -202,12 +212,18 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
         with self.assertRaises(dbm.error):
             await aiodbm.open(self.data_path, "r")
 
-    async def test_can_call_close_multiple_timers(self):
+    async def test_can_call_close_multiple_times(self):
         # given
         db = await aiodbm.open(self.data_path, "c")
         await db.close()
         # when/then
         await db.close()
+
+    async def test_should_raise_error_when_trying_to_connect_again(self):
+        async with aiodbm.open(self.data_path, "c") as db:
+            # when/then
+            with self.assertRaises(RuntimeError):
+                await db._connect()
 
 
 @unittest.skipIf(python_version in ["38", "39"], reason="Unsupported Python")
@@ -246,3 +262,13 @@ class TestGdbmFunctions(DbmAsyncioTestCase):
             # when/then
             await db.set("alpha", "green")
             await db.sync()
+
+    async def test_can_detect_gdbm(self):
+        # given
+        async with aiodbm.open(self.data_path, "c") as db:
+            await db.set("alpha", "green")
+        result = await aiodbm.whichdb(self.data_path)
+        assert result == "dbm.gnu"
+        # when/then
+        async with aiodbm.open(self.data_path, "c") as db:
+            self.assertTrue(db.is_gdbm)
