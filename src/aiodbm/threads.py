@@ -14,6 +14,16 @@ class ThreadRunner(threading.Thread):
         super().__init__()
         self._message_queue = queue.Queue()
 
+    def call_soon(self, future: asyncio.Future, func: Callable):
+        """Schedule this function to be called soon
+        and return the result in the future.
+
+        The future will wait for the thread to start if it not yet running.
+        """
+        if not self.is_alive():
+            raise RuntimeError("Thread is not running.")
+        self._message_queue.put_nowait(_Message(future, func))
+
     def run(self) -> None:
         """
         Execute function calls on a separate thread.
@@ -49,7 +59,7 @@ class ThreadRunner(threading.Thread):
                     set_result, message.future_strict, result
                 )
 
-    def _stop_runner(self):
+    def stop(self):
         """Stop the thread runner."""
         stop_signal = _Message.create_stop_signal()
         self._message_queue.put_nowait(stop_signal)

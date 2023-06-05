@@ -7,7 +7,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Generator, List, Optional, Union
 
-from aiodbm.threads import ThreadRunner, _Message
+from aiodbm.threads import ThreadRunner
 
 logger = logging.getLogger("aiodbm")
 
@@ -56,11 +56,11 @@ class Database:
         self._runner.start()
         try:
             future = asyncio.get_running_loop().create_future()
-            self._runner._message_queue.put_nowait(_Message(future, self._connector))
+            self._runner.call_soon(future, self._connector)
             self._db = await future
         except Exception:
             self._db = None
-            self._runner._stop_runner()
+            self._runner.stop()
             raise
 
         return self
@@ -72,9 +72,7 @@ class Database:
 
         func = partial(fn, *args, **kwargs)
         future = asyncio.get_running_loop().create_future()
-
-        self._runner._message_queue.put_nowait(_Message(future, func))
-
+        self._runner.call_soon(future, func)
         return await future
 
     # DBM API
@@ -92,7 +90,7 @@ class Database:
             raise
         finally:
             self._db = None
-            self._runner._stop_runner()
+            self._runner.stop()
 
     async def delete(self, key: Union[str, bytes]) -> None:
         """Delete given key."""
