@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
 
+## [0.3.0] - 2023-06-05
+
+### Changed
+
+- Moved thread related code into own module for better separation of concerns.
+
 ## [0.2.0] - 2023-06-05
 
 ### Added
