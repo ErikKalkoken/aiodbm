@@ -12,7 +12,7 @@ from typing import Any, Callable, Generator, List, NamedTuple, Optional, Union
 logger = logging.getLogger("aiodbm")
 
 
-class Message(NamedTuple):
+class _Message(NamedTuple):
     """A queue message."""
 
     future: Optional[asyncio.Future]
@@ -37,7 +37,7 @@ class Message(NamedTuple):
         return str(self.func)
 
     @classmethod
-    def create_stop_signal(cls) -> "Message":
+    def create_stop_signal(cls) -> "_Message":
         return cls(None, None, is_stop_signal=True)
 
 
@@ -85,7 +85,7 @@ class Database(threading.Thread):
         self.start()
         try:
             future = asyncio.get_running_loop().create_future()
-            self._message_queue.put_nowait(Message(future, self._connector))
+            self._message_queue.put_nowait(_Message(future, self._connector))
             self._db = await future
         except Exception:
             self._db = None
@@ -102,7 +102,7 @@ class Database(threading.Thread):
         """
 
         while True:  # Continues running until stop signal is received
-            message: Message = self._message_queue.get()
+            message: _Message = self._message_queue.get()
             if message.is_stop_signal:
                 break
 
@@ -132,7 +132,7 @@ class Database(threading.Thread):
 
     def _stop_runner(self):
         """Stop the thread runner."""
-        stop_signal = Message.create_stop_signal()
+        stop_signal = _Message.create_stop_signal()
         self._message_queue.put_nowait(stop_signal)
 
     async def _execute(self, fn, *args, **kwargs) -> Any:
@@ -143,7 +143,7 @@ class Database(threading.Thread):
         func = partial(fn, *args, **kwargs)
         future = asyncio.get_running_loop().create_future()
 
-        self._message_queue.put_nowait(Message(future, func))
+        self._message_queue.put_nowait(_Message(future, func))
 
         return await future
 

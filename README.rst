@@ -12,7 +12,6 @@ Description
 aiodbm is a library that allows you to use DBM in asyncio code.
 
 * Full coverage of Python's DBM and GDBM API
-* Shared single thread implementation for best asyncio performance
 * Typing support
 * Docstrings and documentation
 * Fully tested
@@ -71,6 +70,9 @@ You can install this library directly from PyPI with the following command:
     pip install aiodbm
 
 ------------
+
+Reference
+---------
 
 .. [1] Python's DBM module: https://docs.python.org/3/library/dbm.html
 .. [2] The newer DBM variants GDBM or NDBM are preinstalled on most Linux/Unix systems: https://en.wikipedia.org/wiki/DBM_(computing)#Availability
