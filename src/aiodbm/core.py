@@ -3,52 +3,23 @@
 import asyncio
 import dbm
 import logging
-import queue
-import threading
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Generator, List, NamedTuple, Optional, Union
+from typing import Any, Callable, Generator, List, Optional, Union
+
+from aiodbm.threads import ThreadRunner
 
 logger = logging.getLogger("aiodbm")
 
 
-class _Message(NamedTuple):
-    """A queue message."""
-
-    future: Optional[asyncio.Future]
-    func: Optional[Callable]
-    is_stop_signal: bool = False
-
-    @property
-    def future_strict(self) -> asyncio.Future:
-        """Return future only if it exists, else raise exception."""
-        if self.future is None:
-            raise ValueError("No future")
-        return self.future
-
-    @property
-    def func_strict(self) -> Callable:
-        """Return function only if it exists, else raise exception."""
-        if self.func is None:
-            raise ValueError("No func")
-        return self.func
-
-    def __str__(self) -> str:
-        return str(self.func)
-
-    @classmethod
-    def create_stop_signal(cls) -> "_Message":
-        return cls(None, None, is_stop_signal=True)
-
-
-class Database(threading.Thread):
+class Database:
     """A proxy for a DBM database."""
 
     def __init__(self, connector: Callable) -> None:
         super().__init__()
         self._db = None
         self._connector = connector
-        self._message_queue = queue.Queue()
+        self._runner = ThreadRunner()
 
     def __await__(self) -> Generator[Any, None, "Database"]:
         return self._connect().__await__()
@@ -82,58 +53,15 @@ class Database(threading.Thread):
         if self._db is not None:
             raise RuntimeError("Already connected")
 
-        self.start()
+        self._runner.start()
         try:
-            future = asyncio.get_running_loop().create_future()
-            self._message_queue.put_nowait(_Message(future, self._connector))
-            self._db = await future
+            self._db = await self._runner.call_soon(self._connector)
         except Exception:
             self._db = None
-            self._stop_runner()
+            self._runner.stop()
             raise
 
         return self
-
-    def run(self) -> None:
-        """
-        Execute function calls on a separate thread.
-
-        :meta private:
-        """
-
-        while True:  # Continues running until stop signal is received
-            message: _Message = self._message_queue.get()
-            if message.is_stop_signal:
-                break
-
-            logger.debug("executing %s", message)
-            try:
-                result = message.func_strict()
-            except BaseException as ex:
-                logger.debug("returning exception %s", ex)
-
-                def set_exception(fut, e):
-                    if not fut.done():
-                        fut.set_exception(e)
-
-                message.future_strict.get_loop().call_soon_threadsafe(
-                    set_exception, message.future_strict, ex
-                )
-            else:
-                logger.debug("operation %s completed", message)
-
-                def set_result(fut, result):
-                    if not fut.done():
-                        fut.set_result(result)
-
-                message.future_strict.get_loop().call_soon_threadsafe(
-                    set_result, message.future_strict, result
-                )
-
-    def _stop_runner(self):
-        """Stop the thread runner."""
-        stop_signal = _Message.create_stop_signal()
-        self._message_queue.put_nowait(stop_signal)
 
     async def _execute(self, fn, *args, **kwargs) -> Any:
         """Queue a function with the given arguments for execution in the runner."""
@@ -141,11 +69,7 @@ class Database(threading.Thread):
             raise ValueError("Database closed")
 
         func = partial(fn, *args, **kwargs)
-        future = asyncio.get_running_loop().create_future()
-
-        self._message_queue.put_nowait(_Message(future, func))
-
-        return await future
+        return await self._runner.call_soon(func)
 
     # DBM API
 
@@ -162,7 +86,7 @@ class Database(threading.Thread):
             raise
         finally:
             self._db = None
-            self._stop_runner()
+            self._runner.stop()
 
     async def delete(self, key: Union[str, bytes]) -> None:
         """Delete given key."""
