@@ -14,58 +14,12 @@ from aiodbm.threads import _Message
 logger = logging.getLogger("aiodbm")
 
 
-class Database(threading.Thread):
-    """A proxy for a DBM database."""
+class ThreadRunner(threading.Thread):
+    """A thread for running functions."""
 
-    def __init__(self, connector: Callable) -> None:
+    def __init__(self):
         super().__init__()
-        self._db = None
-        self._connector = connector
         self._message_queue = queue.Queue()
-
-    def __await__(self) -> Generator[Any, None, "Database"]:
-        return self._connect().__await__()
-
-    async def __aenter__(self) -> "Database":
-        return await self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        await self.close()
-
-    @property
-    def _db_strict(self):
-        """Return current database if one is active, else raise exception."""
-        if self._db is None:
-            raise ValueError("no active database")
-
-        return self._db
-
-    @property
-    def _dbm_type_name(self) -> str:
-        """Return name of the currently active DBM variant."""
-        return type(self._db_strict).__name__
-
-    @property
-    def is_gdbm(self) -> bool:
-        """Return True if this is a GDBM database."""
-        return self._dbm_type_name == "gdbm"
-
-    async def _connect(self) -> "Database":
-        """Connect to the actual DBM database."""
-        if self._db is not None:
-            raise RuntimeError("Already connected")
-
-        self.start()
-        try:
-            future = asyncio.get_running_loop().create_future()
-            self._message_queue.put_nowait(_Message(future, self._connector))
-            self._db = await future
-        except Exception:
-            self._db = None
-            self._stop_runner()
-            raise
-
-        return self
 
     def run(self) -> None:
         """
@@ -108,6 +62,60 @@ class Database(threading.Thread):
         stop_signal = _Message.create_stop_signal()
         self._message_queue.put_nowait(stop_signal)
 
+
+class Database:
+    """A proxy for a DBM database."""
+
+    def __init__(self, connector: Callable) -> None:
+        super().__init__()
+        self._db = None
+        self._connector = connector
+        self._runner = ThreadRunner()
+
+    def __await__(self) -> Generator[Any, None, "Database"]:
+        return self._connect().__await__()
+
+    async def __aenter__(self) -> "Database":
+        return await self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()
+
+    @property
+    def _db_strict(self):
+        """Return current database if one is active, else raise exception."""
+        if self._db is None:
+            raise ValueError("no active database")
+
+        return self._db
+
+    @property
+    def _dbm_type_name(self) -> str:
+        """Return name of the currently active DBM variant."""
+        return type(self._db_strict).__name__
+
+    @property
+    def is_gdbm(self) -> bool:
+        """Return True if this is a GDBM database."""
+        return self._dbm_type_name == "gdbm"
+
+    async def _connect(self) -> "Database":
+        """Connect to the actual DBM database."""
+        if self._db is not None:
+            raise RuntimeError("Already connected")
+
+        self._runner.start()
+        try:
+            future = asyncio.get_running_loop().create_future()
+            self._runner._message_queue.put_nowait(_Message(future, self._connector))
+            self._db = await future
+        except Exception:
+            self._db = None
+            self._runner._stop_runner()
+            raise
+
+        return self
+
     async def _execute(self, fn, *args, **kwargs) -> Any:
         """Queue a function with the given arguments for execution in the runner."""
         if self._db is None:
@@ -116,7 +124,7 @@ class Database(threading.Thread):
         func = partial(fn, *args, **kwargs)
         future = asyncio.get_running_loop().create_future()
 
-        self._message_queue.put_nowait(_Message(future, func))
+        self._runner._message_queue.put_nowait(_Message(future, func))
 
         return await future
 
@@ -135,7 +143,7 @@ class Database(threading.Thread):
             raise
         finally:
             self._db = None
-            self._stop_runner()
+            self._runner._stop_runner()
 
     async def delete(self, key: Union[str, bytes]) -> None:
         """Delete given key."""

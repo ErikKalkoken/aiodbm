@@ -159,7 +159,7 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
             pass
         # then
         time.sleep(1)
-        self.assertFalse(db.is_alive())
+        self.assertFalse(db._runner.is_alive())
 
     async def test_should_stop_thread_when_closing(self):
         async with aiodbm.open(self.data_path, "c") as db:
@@ -167,7 +167,7 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
             await db.close()
             # then
             time.sleep(1)
-            self.assertFalse(db.is_alive())
+            self.assertFalse(db._runner.is_alive())
 
     async def test_can_open_without_context_manager(self):
         db = await aiodbm.open(self.data_path, "c")
