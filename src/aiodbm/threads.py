@@ -1,5 +1,58 @@
 import asyncio
+import logging
+import queue
+import threading
 from typing import Callable, NamedTuple, Optional
+
+logger = logging.getLogger("aiodbm")
+
+
+class ThreadRunner(threading.Thread):
+    """A thread for running functions."""
+
+    def __init__(self):
+        super().__init__()
+        self._message_queue = queue.Queue()
+
+    def run(self) -> None:
+        """
+        Execute function calls on a separate thread.
+        :meta private:
+        """
+
+        while True:  # Continues running until stop signal is received
+            message: _Message = self._message_queue.get()
+            if message.is_stop_signal:
+                break
+
+            logger.debug("executing %s", message)
+            try:
+                result = message.func_strict()
+            except BaseException as ex:
+                logger.debug("returning exception %s", ex)
+
+                def set_exception(fut, e):
+                    if not fut.done():
+                        fut.set_exception(e)
+
+                message.future_strict.get_loop().call_soon_threadsafe(
+                    set_exception, message.future_strict, ex
+                )
+            else:
+                logger.debug("operation %s completed", message)
+
+                def set_result(fut, result):
+                    if not fut.done():
+                        fut.set_result(result)
+
+                message.future_strict.get_loop().call_soon_threadsafe(
+                    set_result, message.future_strict, result
+                )
+
+    def _stop_runner(self):
+        """Stop the thread runner."""
+        stop_signal = _Message.create_stop_signal()
+        self._message_queue.put_nowait(stop_signal)
 
 
 class _Message(NamedTuple):
