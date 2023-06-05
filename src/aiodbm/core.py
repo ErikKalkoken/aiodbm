@@ -55,9 +55,7 @@ class Database:
 
         self._runner.start()
         try:
-            future = asyncio.get_running_loop().create_future()
-            self._runner.call_soon(future, self._connector)
-            self._db = await future
+            self._db = await self._runner.call_soon(self._connector)
         except Exception:
             self._db = None
             self._runner.stop()
@@ -71,9 +69,7 @@ class Database:
             raise ValueError("Database closed")
 
         func = partial(fn, *args, **kwargs)
-        future = asyncio.get_running_loop().create_future()
-        self._runner.call_soon(future, func)
-        return await future
+        return await self._runner.call_soon(func)
 
     # DBM API
 

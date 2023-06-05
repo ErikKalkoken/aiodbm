@@ -1,28 +1,35 @@
+"""Ability to run functions in a thread called from asyncio."""
+
 import asyncio
 import logging
 import queue
 import threading
-from typing import Callable, NamedTuple, Optional
+from typing import Any, Callable, NamedTuple, Optional
 
 logger = logging.getLogger("aiodbm")
 
 
 class ThreadRunner(threading.Thread):
-    """A thread for running functions."""
+    """A thread runner can run functions, which are called from asyncio.
+
+    All calls are executed in the same single thread and are serialized.
+    """
 
     def __init__(self):
         super().__init__()
         self._message_queue = queue.Queue()
 
-    def call_soon(self, future: asyncio.Future, func: Callable):
-        """Schedule this function to be called soon
-        and return the result in the future.
+    async def call_soon(self, func: Callable) -> Any:
+        """Schedule this function to be called soon by this thread
+        and return the results as future.
 
-        The future will wait for the thread to start if it not yet running.
+        Note that the thread must to be running.
         """
         if not self.is_alive():
             raise RuntimeError("Thread is not running.")
+        future = asyncio.get_running_loop().create_future()
         self._message_queue.put_nowait(_Message(future, func))
+        return await future
 
     def run(self) -> None:
         """

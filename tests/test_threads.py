@@ -6,7 +6,7 @@ from unittest.mock import Mock
 from aiodbm.threads import ThreadRunner, _Message
 
 
-class TestThreadRunnerBasics(unittest.TestCase):
+class TestThreadRunnerBasics(unittest.IsolatedAsyncioTestCase):
     def test_can_create(self):
         # when
         thread = ThreadRunner()
@@ -24,18 +24,42 @@ class TestThreadRunnerBasics(unittest.TestCase):
         time.sleep(1)
         self.assertFalse(thread.is_alive())
 
-    def test_should_raise_error_when_trying_to_schedule_work_while_not_running(self):
+    async def test_should_raise_error_when_trying_to_schedule_work_while_not_running(
+        self,
+    ):
         # given
         thread = ThreadRunner()
         # when/then
         with self.assertRaises(RuntimeError):
-            thread.call_soon(Mock(), Mock)
+            await thread.call_soon(Mock)
 
 
-class TestThreadRunnerWork(unittest.TestCase):
+class TestThreadRunnerWork(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.thread = ThreadRunner()
         self.thread.start()
+
+    async def test_should_run_function_in_thread(self):
+        def my_func():
+            return 42
+
+        # when
+        result = await self.thread.call_soon(my_func)
+        # then
+        self.assertEqual(result, 42)
+
+    async def test_should_propagate_exception_when_occurred_in_function_call(self):
+        def my_func():
+            raise ValueError("Test exception")
+
+        # when/then
+        with self.assertRaises(ValueError):
+            await self.thread.call_soon(my_func)
+
+    async def test_should_raise_error_when_not_a_callable(self):
+        # when/then
+        with self.assertRaises(TypeError):
+            await self.thread.call_soon("dummy")  # type: ignore
 
     def tearDown(self) -> None:
         self.thread.stop()
