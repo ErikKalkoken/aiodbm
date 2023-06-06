@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Added
 
 - `keys_iterator()` return an async iterator to loop over all keys.
+- The DBM exception tuple `dbm.error` is now passed through
 
 ### Changes
 
