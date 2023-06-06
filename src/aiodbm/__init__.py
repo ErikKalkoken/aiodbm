@@ -1,6 +1,6 @@
 """An AsyncIO bridge for DBM."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from .core import Database, error, open, whichdb
 

@@ -4,8 +4,6 @@
 API Reference
 ===============
 
-.. automodule:: aiodbm
-
 .. autodata:: error
 
     A tuple containing the exceptions that can be raised by each
@@ -22,3 +20,9 @@ API Reference
                 ...
         except aiodbm.error as ex:
             print(f"Error when trying to open the database: {ex}")
+
+.. autofunction:: aiodbm.open
+
+.. autofunction:: aiodbm.whichdb
+
+.. autoclass:: aiodbm.Database

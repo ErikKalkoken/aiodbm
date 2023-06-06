@@ -196,20 +196,28 @@ class Database:
 
 
 def open(file: Union[str, Path], *args, **kwargs) -> Database:
-    """Create and return a proxy to the DBM database.
-
-    Example:
-
-    .. code-block:: Python
-
-        async with open("example.dbm", "c") as db:
-            ...
+    """Create and return a proxy to a DBM database.
 
     Args:
         file: filename for the DBM database
 
     Returns:
         DBM database proxy object
+
+    Usage A:
+
+    .. code-block:: Python
+
+        async with open("example.dbm", "c") as db:
+            ...
+
+    Usage B:
+
+    .. code-block:: Python
+
+        db = async open("example.dbm", "c"):
+        ...
+        await db.close()
     """
 
     def connector():
