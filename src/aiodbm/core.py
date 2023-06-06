@@ -215,7 +215,7 @@ def open(file: Union[str, Path], *args, **kwargs) -> Database:
 
     .. code-block:: Python
 
-        db = async open("example.dbm", "c"):
+        db = await open("example.dbm", "c"):
         ...
         await db.close()
     """
