@@ -10,13 +10,3 @@
     :maxdepth: 4
 
     api
-
----------------------------
-
-Contents
---------
-
-.. toctree::
-    :maxdepth: 2
-
-    api

@@ -1,4 +1,3 @@
-import dbm
 import shutil
 import sys
 import tempfile
@@ -175,7 +174,7 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
         await db.close()
 
     async def test_open_raises_exception_when_opening_fails(self):
-        with self.assertRaises(dbm.error):
+        with self.assertRaises(aiodbm.error):
             await aiodbm.open(self.data_path, "r")
 
     async def test_can_call_close_multiple_times(self):

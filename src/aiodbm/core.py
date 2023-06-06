@@ -3,6 +3,7 @@
 import asyncio
 import dbm
 import logging
+from dbm import error
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Generator, List, Optional, Union
@@ -10,6 +11,9 @@ from typing import Any, Callable, Generator, List, Optional, Union
 from aiodbm.threads import ThreadRunner
 
 logger = logging.getLogger("aiodbm")
+
+
+__all__ = ["Database", "error", "open", "whichdb"]
 
 
 class Database:
