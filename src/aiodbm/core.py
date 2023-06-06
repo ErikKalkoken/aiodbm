@@ -3,17 +3,25 @@
 import asyncio
 import dbm
 import logging
+from dbm import error
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Generator, List, Optional, Union
+from typing import Any, AsyncGenerator, Callable, Generator, List, Optional, Union
 
 from aiodbm.threads import ThreadRunner
 
 logger = logging.getLogger("aiodbm")
 
 
+__all__ = ["Database", "error", "open", "whichdb"]
+
+
 class Database:
-    """A proxy for a DBM database."""
+    """A DBM database.
+
+    Not that some methods are available on GDBM only.
+    You can check if your database is GDBM with :func:`is_gdbm`.
+    """
 
     def __init__(self, connector: Callable) -> None:
         super().__init__()
@@ -143,6 +151,28 @@ class Database:
 
         return await self._execute(self._db_strict.firstkey)
 
+    async def keys_iterator(self) -> AsyncGenerator[bytes, None]:
+        """Return all keys as async generator. GDBM only.
+
+        In contrast to :func:`keys` this method will not load the full list of keys into
+        memory, but instead fetch keys one after the other.
+
+        Note that the order of keys is implementation specific
+        and can not be relied on.
+
+        Usage example:
+
+        .. code-block:: Python
+
+            async for key in db.keys_iterator():
+                print(key)
+
+        """
+        key = await self.firstkey()
+        while key is not None:
+            yield key
+            key = await self.nextkey(key)
+
     async def nextkey(self, key: Union[str, bytes]) -> Optional[bytes]:
         """Return the next key, when looping over all keys.
         Or return None, when the end of the loop has been reached.
@@ -166,20 +196,28 @@ class Database:
 
 
 def open(file: Union[str, Path], *args, **kwargs) -> Database:
-    """Create and return a proxy to the DBM database.
-
-    Example:
-
-    .. code-block:: Python
-
-        async with open("example.dbm", "c") as db:
-            ...
+    """Create and return a proxy to a DBM database.
 
     Args:
         file: filename for the DBM database
 
     Returns:
         DBM database proxy object
+
+    Usage A:
+
+    .. code-block:: Python
+
+        async with open("example.dbm", "c") as db:
+            ...
+
+    Usage B:
+
+    .. code-block:: Python
+
+        db = async open("example.dbm", "c"):
+        ...
+        await db.close()
     """
 
     def connector():

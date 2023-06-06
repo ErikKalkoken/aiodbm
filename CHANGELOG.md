@@ -13,6 +13,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
 
+## [0.4.0] - 2023-06-06
+
+### Added
+
+- `keys_iterator()` return an async iterator to loop over all keys.
+
+### Changes
+
+- Improved docs
+
 ## [0.3.0] - 2023-06-05
 
 ### Changed

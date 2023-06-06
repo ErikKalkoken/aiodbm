@@ -1,4 +1,3 @@
-import dbm
 import shutil
 import sys
 import tempfile
@@ -175,7 +174,7 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
         await db.close()
 
     async def test_open_raises_exception_when_opening_fails(self):
-        with self.assertRaises(dbm.error):
+        with self.assertRaises(aiodbm.error):
             await aiodbm.open(self.data_path, "r")
 
     async def test_can_call_close_multiple_times(self):
@@ -191,9 +190,19 @@ class TestDatabaseAsync(DbmAsyncioTestCase):
             with self.assertRaises(RuntimeError):
                 await db._connect()
 
+    async def test_should_raise_error_when_trying_to_access_closed_database(
+        self,
+    ):
+        async with aiodbm.open(self.data_path, "c") as db:
+            # given
+            await db.close()
+            # when/then
+            with self.assertRaises(ValueError):
+                await db.get("alpha")
+
 
 @unittest.skipIf(python_version in ["38", "39"], reason="Unsupported Python")
-class TestGdbmFunctions(DbmAsyncioTestCase):
+class TestGdbmFeatures(DbmAsyncioTestCase):
     async def test_firstkey_should_return_first_key(self):
         async with aiodbm.open(self.data_path, "c") as db:
             # given
@@ -238,3 +247,16 @@ class TestGdbmFunctions(DbmAsyncioTestCase):
         # when/then
         async with aiodbm.open(self.data_path, "c") as db:
             self.assertTrue(db.is_gdbm)
+
+    async def test_can_iter_over_all_keys(self):
+        async with aiodbm.open(self.data_path, "c") as db:
+            # given
+            await db.set("alpha", "green")
+            await db.set("bravo", "green")
+            await db.set("charlie", "green")
+            # when
+            keys = set()
+            async for key in db.keys_iterator():
+                keys.add(key)
+            # then
+            self.assertSetEqual(keys, {b"alpha", b"bravo", b"charlie"})
