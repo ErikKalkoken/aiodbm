@@ -1,5 +1,6 @@
-"""Measure and compare throughput between normal DBM and asyncio version."""
+"""Measure and compare throughput between different asyncio key/value stores."""
 
+import argparse
 import asyncio
 import datetime as dt
 import json
@@ -48,12 +49,12 @@ def random_string(length: int) -> str:
 class Runner(ABC):
     name = "UNDEFINED"
 
-    def __init__(self, items_amount, obj_size) -> None:
-        if not items_amount or not obj_size:
+    def __init__(self, items_amount, item_size) -> None:
+        if not items_amount or not item_size:
             raise ValueError("Invalid params")
 
         self._items_amount = items_amount
-        self._obj_size = obj_size
+        self._item_size = item_size
         self._read_seconds = None
         self._write_sec = None
 
@@ -62,8 +63,8 @@ class Runner(ABC):
         return self._items_amount
 
     @property
-    def obj_size(self):
-        return self._obj_size
+    def item_size(self):
+        return self._item_size
 
     @property
     def read_throughput(self):
@@ -91,7 +92,7 @@ class Runner(ABC):
         """Run measurements and return result as throughput in items / sec."""
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "measurement_2.dbm"
-            objs = self.generate_objs()
+            objs = self.generate_items()
 
             logger.info("%s: Start write measurements", self.name)
             timer_write = Timer()
@@ -111,9 +112,9 @@ class Runner(ABC):
         self._read_seconds = timer_read.duration_sec
         self._write_sec = timer_write.duration_sec
 
-    def generate_objs(self) -> Dict[str, bytes]:
+    def generate_items(self) -> Dict[str, bytes]:
         objs = {
-            f"item-{num:010}": random_string(self.obj_size).encode("utf-8")
+            f"item-{num:010}": random_string(self.item_size).encode("utf-8")
             for num in range(1, self.items_amount + 1)
         }
         return objs
@@ -136,7 +137,7 @@ class Runner(ABC):
             "read_throughput": self.read_throughput,
             "write_throughput": self.write_throughput,
             "items_amount": self.items_amount,
-            "object_size": self._obj_size,
+            "object_size": self._item_size,
             "timestamp": dt.datetime.utcnow().isoformat(),
         }
         return data
@@ -197,11 +198,27 @@ async def run_async(runners: Iterable[Runner]):
 
 
 def main():
-    items_amount = 10_000
-    object_size = 256
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--items-amount",
+        default=10_000,
+        type=int,
+        help="Amount of items to run measurement with",
+    )
+    parser.add_argument(
+        "--item-size", default=256, type=int, help="Size of binary items in bytes"
+    )
+    args = parser.parse_args()
+
+    logger.info(
+        "Running measurements with %d items and %d item size",
+        args.items_amount,
+        args.item_size,
+    )
+
     runners: List[Runner] = [
-        SqliteRunner(items_amount, object_size),
-        DbmRunner(items_amount, object_size),
+        SqliteRunner(args.items_amount, args.item_size),
+        DbmRunner(args.items_amount, args.item_size),
     ]
 
     asyncio.run(run_async(runners))
