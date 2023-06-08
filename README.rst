@@ -17,22 +17,24 @@ aiodbm is a library that allows you to use DBM in asyncio code.
 * Fully tested
 
 Why use DBM?
-------------
+---------------
 
-DBM is a fast, embedded key-value store.
+`DBM <https://en.wikipedia.org/wiki/DBM_(computing)>`_ is a fast and easy to use, embedded key-value store.
 It is supported by Python's standard library [1]_ and can be used on most systems without requiring additional dependencies [2]_.
 
-Compared to Sqlite - the other popular embedded database support by Python's standard library - it can be significantly faster,
-but also does not provide any of sqlite's advanced features like transactions or process safety. [3]_
+Compared to Sqlite - the other embedded database supported by Python's standard library - it is significantly faster when used as key/value store.
 
-If you are are looking for a simple and fast key-value store (e.g. for caching) - especially on Linux systems,
-where the GDBM variant is available - DBM can be a good solution.
+According to our measurement we see that aiodbm is about 140x faster on writes and about 3.5x faster on reads [3]_ on Linux:
+
+.. image:: measurements/measurements.png
+  :width: 800
+  :alt: Throughput measurements for aiodbm vs. aiosqlite
+
+So if you are looking for a fast and an easy to use key-value store (e.g. for caching) on Linux systems, DBM can be a good solution. And aiodbm allows you use DBM in your asyncio programs.
 
 Caveats
 -------
 
-While Python's DBM library should ensure, that aiodbm works with any DBM variant and on any system,
-this library has been developed and tested primarily with GDBM on Linux.
 On non Linux-like systems Python might use it's "dumb" DBM implementation, which will be much slower.
 
 DBM is not process safe. If you need a key-value store in a multi process context (e.g. a web server running with gunicorn) we'd recommend to use Redis or something similar instead.
@@ -40,24 +42,31 @@ DBM is not process safe. If you need a key-value store in a multi process contex
 Usage
 -----
 
-Here is a basic example on how to use the queue:
+Here is a basic example on how to use the library:
 
 .. code:: python
 
-    import asyncio
+   import asyncio
 
-    import aiodbm
-
-
-    async def main():
-        async with aiodbm.open("example.dbm", "c") as db:  # opening/creating database
-            await db.set("alpha", "green")  # creating new key alpha with value green
-            value = await db.get("alpha")  # fetching value for key alpha
-            print(value)
-            await db.delete("alpha")  # delete key alpha
+   import aiodbm
 
 
-    asyncio.run(main())
+   async def main():
+      # opening/creating database
+      async with aiodbm.open("example.dbm", "c") as db:
+
+         # creating new key alpha with value green
+         await db.set("alpha", "green")
+
+         # fetching value for key alpha
+         value = await db.get("alpha")
+         print(value)
+
+         # delete key alpha
+         await db.delete("alpha")
+
+
+   asyncio.run(main())
 
 
 Installation
@@ -74,9 +83,11 @@ You can install this library directly from PyPI with the following command:
 Reference
 ---------
 
-.. [1] Python's DBM module: https://docs.python.org/3/library/dbm.html
+.. [1] See also Python's DBM module: https://docs.python.org/3/library/dbm.html
+
 .. [2] The newer DBM variants GDBM or NDBM are preinstalled on most Linux/Unix systems: https://en.wikipedia.org/wiki/DBM_(computing)#Availability
-.. [3] Python benchmark with DBM, Sqlite and other embedded databases: https://charlesleifer.com/blog/completely-un-scientific-benchmarks-of-some-embedded-databases-with-python/
+
+.. [3] We compared the asyncio versions with 10.000 write and read operations of key/value pairs on Linux with GDBM. See also measurements folder for more details.
 
 .. _DBM: https://en.wikipedia.org/wiki/DBM_(computing)
 .. _benchmark: https://charlesleifer.com/blog/completely-un-scientific-benchmarks-of-some-embedded-databases-with-python/

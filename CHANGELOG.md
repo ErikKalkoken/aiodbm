@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
 
+## [0.4.1] - 2023-06-08
+
+### Changed
+
+- Measurements are now run against aiosqlite
+
 ## [0.4.0] - 2023-06-06
 
 ### Added

@@ -4,11 +4,17 @@ import aiodbm
 
 
 async def main():
-    async with aiodbm.open("data.dbm", "c") as db:  # opening/creating database
-        await db.set("alpha", "green")  # creating new key alpha with value green
-        value = await db.get("alpha")  # fetching value for key alpha
+    # opening/creating database
+    async with aiodbm.open("example.dbm", "c") as db:
+        # creating new key alpha with value green
+        await db.set("alpha", "green")
+
+        # fetching value for key alpha
+        value = await db.get("alpha")
         print(value)
-        await db.delete("alpha")  # delete key alpha
+
+        # delete key alpha
+        await db.delete("alpha")
 
 
 asyncio.run(main())
