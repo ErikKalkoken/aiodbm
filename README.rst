@@ -26,7 +26,7 @@ Compared to Sqlite - the other embedded database supported by Python's standard 
 
 According to our measurement we see that aiodbm is about 140x faster on writes and about 3.5x faster on reads [3]_ on Linux:
 
-.. image:: measurements/measurements.png
+.. image:: https://raw.githubusercontent.com/ErikKalkoken/aiodbm/main/measurements/measurements.png
   :width: 800
   :alt: Throughput measurements for aiodbm vs. aiosqlite
 
