@@ -30,7 +30,7 @@ According to our measurement we see that aiodbm is about 140x faster on writes a
   :width: 800
   :alt: Throughput measurements for aiodbm vs. aiosqlite
 
-So if you want to are looking for a fast and an easy to use key-value store (e.g. for caching) on Linux systems, DBM can be a good solution.
+So if you are looking for a fast and an easy to use key-value store (e.g. for caching) on Linux systems, DBM can be a good solution. And aiodbm allows you use DBM in your asyncio programs.
 
 Caveats
 -------
