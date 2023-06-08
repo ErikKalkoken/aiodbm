@@ -16,7 +16,7 @@ aiodbm is a library that allows you to use DBM in asyncio code.
 * Docstrings and documentation
 * Fully tested
 
-Why use DBM?
+Why use aiodbm?
 ---------------
 
 `DBM <https://en.wikipedia.org/wiki/DBM_(computing)>`_ is a fast and easy to use, embedded key-value store.
@@ -24,20 +24,20 @@ It is supported by Python's standard library [1]_ and can be used on most system
 
 Compared to Sqlite - the other embedded database supported by Python's standard library - it is significantly faster when used as key/value store.
 
-According to our measurement we see that aiodbm is about 140x faster on writes and about 3.5x faster on reads [3]_ on Linux:
+In our measurements we see that aiodbm is hundreds or times faster for writes and more then three faster for reads compared to aiosqlite [3]_:
 
 .. image:: https://raw.githubusercontent.com/ErikKalkoken/aiodbm/main/measurements/measurements.png
   :width: 800
   :alt: Throughput measurements for aiodbm vs. aiosqlite
 
-So if you are looking for a fast and an easy to use key-value store (e.g. for caching) on Linux systems, DBM can be a good solution. And aiodbm allows you use DBM in your asyncio programs.
+So if you are on a Linux system and need a fast and an easy to use embedded key-value store for asyncio, aiodbm can be a good solution.
 
 Caveats
 -------
 
-On non Linux-like systems Python might use it's "dumb" DBM implementation, which will be much slower.
+On non Linux-like systems DBM is usually not available and Python will fall back on it's "dumb" DBM implementation. While DBM's core functionality still works, that implementation is be much slower.
 
-DBM is not process safe. If you need a key-value store in a multi process context (e.g. a web server running with gunicorn) we'd recommend to use Redis or something similar instead.
+Python's DBM library is not process safe. If you need a key-value store in a multi process context (e.g. a web server running with gunicorn) we'd recommend to use Redis or something similar instead.
 
 Usage
 -----
@@ -87,7 +87,7 @@ Reference
 
 .. [2] The newer DBM variants GDBM or NDBM are preinstalled on most Linux/Unix systems: https://en.wikipedia.org/wiki/DBM_(computing)#Availability
 
-.. [3] We compared the asyncio versions with 10.000 write and read operations of key/value pairs on Linux with GDBM. See also measurements folder for more details.
+.. [3] We compared asyncio compatible key/value stores on Linux with GDBM. See also measurements folder for more details.
 
 .. _DBM: https://en.wikipedia.org/wiki/DBM_(computing)
 .. _benchmark: https://charlesleifer.com/blog/completely-un-scientific-benchmarks-of-some-embedded-databases-with-python/

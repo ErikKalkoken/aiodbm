@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
 
+## [0.4.2] - 2023-06-08
+
+### Changed
+
+- Changed measurements default to 50K items
+
 ## [0.4.1] - 2023-06-08
 
 ### Changed
